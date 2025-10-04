@@ -63,3 +63,6 @@ metadata.json
 .DS_Store
 Thumbs.db
 
+# D
+infra/tiles/*
+infra/downloads/*
