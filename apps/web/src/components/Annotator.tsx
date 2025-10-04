@@ -5,6 +5,7 @@ import OpenSeadragon from "openseadragon";
 import { useViewerStore } from "@/store/viewerStore";
 import { api } from "@/lib/api";
 import type { CreateAnnotation } from "@astro-zoom/proto";
+import { useMutation } from "@tanstack/react-query";
 
 interface AnnotatorProps {
   tileSource: string;
@@ -20,8 +21,22 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
   const [annotationType, setAnnotationType] = useState<AnnotationType>("rect");
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
+  const [classification, setClassification] = useState<any>(null);
+  const [showClassification, setShowClassification] = useState(false);
   const annotations = useViewerStore((state) => state.annotations);
   const addAnnotation = useViewerStore((state) => state.addAnnotation);
+
+  // Classification mutation
+  const classifyMutation = useMutation({
+    mutationFn: (bbox: [number, number, number, number]) => 
+      api.classifyRegion(datasetId, bbox),
+    onSuccess: (data) => {
+      setClassification(data);
+      setShowClassification(true);
+      // Auto-hide after 5 seconds
+      setTimeout(() => setShowClassification(false), 5000);
+    },
+  });
 
   useEffect(() => {
     if (!viewerRef.current || osdRef.current) return;
@@ -163,6 +178,14 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
           try {
             const created = await api.createAnnotation(annotationData);
             addAnnotation(created);
+
+            // Automatically classify the region
+            classifyMutation.mutate([
+              Math.round(x),
+              Math.round(y),
+              Math.round(width),
+              Math.round(height),
+            ]);
           } catch (error) {
             console.error("Failed to create annotation:", error);
           }
@@ -193,9 +216,47 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
           onClick={() => setAnnotationType("rect")}
           className={`px-4 py-2 rounded ${annotationType === "rect" ? "bg-blue-600" : "bg-gray-700"}`}
         >
-          Rectangle
+          Rectangle + AI Classify
         </button>
       </div>
+
+      {/* Classification result popup */}
+      {showClassification && classification && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-900/95 p-4 rounded-lg backdrop-blur-sm border border-green-500/50 max-w-sm">
+          <div className="flex items-start justify-between mb-2">
+            <h4 className="text-sm font-semibold text-green-400">🔬 AI Classification</h4>
+            <button
+              onClick={() => setShowClassification(false)}
+              className="text-gray-400 hover:text-white text-xs"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="space-y-2">
+            <div className="text-sm">
+              <span className="text-gray-400">Detected: </span>
+              <span className="text-white font-medium">{classification.primary_classification}</span>
+            </div>
+            <div className="text-sm">
+              <span className="text-gray-400">Confidence: </span>
+              <span className="text-green-400 font-medium">
+                {(classification.confidence * 100).toFixed(1)}%
+              </span>
+            </div>
+            {classification.all_classifications && classification.all_classifications.length > 1 && (
+              <div className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-700">
+                <div>Other possibilities:</div>
+                {classification.all_classifications.slice(1, 4).map((cls: any, idx: number) => (
+                  <div key={idx} className="flex justify-between mt-1">
+                    <span>{cls.type}</span>
+                    <span>{(cls.confidence * 100).toFixed(1)}%</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

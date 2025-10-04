@@ -55,4 +55,22 @@ export const api = {
     if (!res.ok) throw new Error("Failed to search");
     return res.json();
   },
+
+  async classifyRegion(datasetId: string, bbox: [number, number, number, number]): Promise<any> {
+    const bboxStr = bbox.join(',');
+    const res = await fetch(
+      `${API_BASE}/classify?datasetId=${datasetId}&bbox=${bboxStr}`,
+      { method: "POST" }
+    );
+    if (!res.ok) throw new Error("Failed to classify region");
+    return res.json();
+  },
+
+  async detectObjects(query: string, datasetId: string, confidenceThreshold = 0.6, maxResults = 50): Promise<any> {
+    const res = await fetch(
+      `${API_BASE}/detect?q=${encodeURIComponent(query)}&datasetId=${datasetId}&confidence_threshold=${confidenceThreshold}&max_results=${maxResults}`
+    );
+    if (!res.ok) throw new Error("Failed to detect objects");
+    return res.json();
+  },
 };
