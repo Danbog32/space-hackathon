@@ -127,6 +127,22 @@ The system will automatically generate optimized DZI tiles with progress trackin
 
 **Supported formats:** JPG, PNG, TIFF • **Max size:** 500MB • **Min dimensions:** 256×256px
 
+### Managing Datasets
+
+Each dataset card on the homepage includes a **delete button** (trash icon):
+- Click the delete button on any dataset
+- Confirm the deletion
+- The system will robustly remove all associated files (tiles, uploads, database entries)
+- Deletion works even if the dataset is corrupted or partially missing
+
+**Storage Optimization:** The system automatically cleans up temporary files:
+- Original upload files are deleted after successful tile generation
+- Temp directories are cleaned automatically
+- Only the optimized tiles and database entries are kept
+- This saves 40-60% disk space compared to keeping original uploads
+
+See [STORAGE_LOCATIONS.md](STORAGE_LOCATIONS.md) for detailed storage information.
+
 ### Using Real NASA Data (Manual Processing)
 
 The project includes mock sample tiles by default. To manually process the **real 209MB NASA Andromeda image**:

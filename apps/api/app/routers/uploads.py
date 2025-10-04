@@ -56,6 +56,7 @@ def process_image_background(
     name: str,
     description: Optional[str],
     session: Session,
+    cleanup_upload: bool = True,
 ):
     """
     Background task to process uploaded image and create dataset.
@@ -66,7 +67,13 @@ def process_image_background(
         name: Dataset name
         description: Optional dataset description
         session: Database session
+        cleanup_upload: Whether to delete the original upload after processing (default: True)
     """
+    import logging
+    import shutil
+    
+    logger = logging.getLogger(__name__)
+    
     try:
         # Update status
         processing_status[dataset_id] = {
@@ -107,11 +114,30 @@ def process_image_background(
                 "height": result["height"],
                 "total_tiles": result["total_tiles"],
                 "is_uploaded": True,
+                "upload_cleaned": cleanup_upload,
             },
         )
         
         session.add(dataset)
         session.commit()
+        
+        # Clean up original upload file to save disk space (optional)
+        if cleanup_upload:
+            try:
+                if image_path.exists():
+                    image_path.unlink()
+                    logger.info(f"Cleaned up upload file: {image_path}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up upload file {image_path}: {e}")
+        
+        # Clean up any temp directories created by PIL/Pillow
+        try:
+            temp_dir = UPLOAD_DIR / "temp"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                logger.info(f"Cleaned up temp directory: {temp_dir}")
+        except Exception as e:
+            logger.warning(f"Failed to clean up temp directory: {e}")
         
         # Update status
         processing_status[dataset_id] = {
@@ -132,12 +158,27 @@ def process_image_background(
             "progress": 0,
             "message": str(e),
         }
+        # Clean up upload file on error
+        try:
+            if image_path.exists():
+                image_path.unlink()
+                logger.info(f"Cleaned up upload file after error: {image_path}")
+        except Exception as cleanup_error:
+            logger.warning(f"Failed to clean up upload file after error: {cleanup_error}")
+            
     except Exception as e:
         processing_status[dataset_id] = {
             "status": "error",
             "progress": 0,
             "message": f"Unexpected error: {str(e)}",
         }
+        # Clean up upload file on error
+        try:
+            if image_path.exists():
+                image_path.unlink()
+                logger.info(f"Cleaned up upload file after error: {image_path}")
+        except Exception as cleanup_error:
+            logger.warning(f"Failed to clean up upload file after error: {cleanup_error}")
 
 
 @router.post("/upload", response_model=dict, status_code=202)
@@ -268,49 +309,115 @@ async def delete_dataset(
     session: Session = Depends(get_session),
 ):
     """
-    Delete a dataset and its tiles.
+    Delete a dataset and its tiles (robust deletion).
     
-    This will remove:
+    This will attempt to remove all traces of the dataset:
     - Database entry
     - All generated tiles
     - Original uploaded image
-    """
-    # Get dataset
-    dataset = session.get(Dataset, dataset_id)
-    if not dataset:
-        raise HTTPException(status_code=404, detail="Dataset not found")
+    - Processing status
     
+    The deletion is robust - it continues even if some parts fail,
+    ensuring maximum cleanup even for corrupted datasets.
+    """
+    import shutil
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    errors = []
+    success_count = 0
+    
+    # Try to get dataset from database
+    dataset = session.get(Dataset, dataset_id)
+    dataset_existed = dataset is not None
+    
+    # 1. Delete tiles directory (even if dataset not in DB)
     try:
-        # Delete tiles
         tiles_dir = TILES_DIR / dataset_id
         if tiles_dir.exists():
-            import shutil
-            shutil.rmtree(tiles_dir)
-        
-        # Delete uploaded image
-        for ext in [".jpg", ".jpeg", ".png", ".tiff", ".tif"]:
+            shutil.rmtree(tiles_dir, ignore_errors=True)
+            success_count += 1
+            logger.info(f"Deleted tiles directory: {tiles_dir}")
+        else:
+            logger.info(f"Tiles directory not found: {tiles_dir}")
+    except Exception as e:
+        errors.append(f"Tiles deletion error: {str(e)}")
+        logger.warning(f"Failed to delete tiles for {dataset_id}: {e}")
+    
+    # 2. Delete uploaded image (try all possible extensions)
+    for ext in [".jpg", ".jpeg", ".png", ".tiff", ".tif"]:
+        try:
             upload_file = UPLOAD_DIR / f"{dataset_id}{ext}"
             if upload_file.exists():
                 upload_file.unlink()
-        
-        # Delete database entry
-        session.delete(dataset)
-        session.commit()
-        
-        # Clean up processing status
+                success_count += 1
+                logger.info(f"Deleted upload file: {upload_file}")
+        except Exception as e:
+            errors.append(f"Upload file {ext} deletion error: {str(e)}")
+            logger.warning(f"Failed to delete upload file {dataset_id}{ext}: {e}")
+    
+    # 2.5. Clean up any temp directories
+    try:
+        temp_upload_dir = UPLOAD_DIR / "temp" / dataset_id
+        if temp_upload_dir.exists():
+            shutil.rmtree(temp_upload_dir, ignore_errors=True)
+            success_count += 1
+            logger.info(f"Deleted temp directory: {temp_upload_dir}")
+    except Exception as e:
+        errors.append(f"Temp directory deletion error: {str(e)}")
+        logger.warning(f"Failed to delete temp directory for {dataset_id}: {e}")
+    
+    # 3. Delete database entry
+    if dataset:
+        try:
+            session.delete(dataset)
+            session.commit()
+            success_count += 1
+            logger.info(f"Deleted database entry for: {dataset_id}")
+        except Exception as e:
+            errors.append(f"Database deletion error: {str(e)}")
+            logger.warning(f"Failed to delete database entry for {dataset_id}: {e}")
+            # Try to rollback
+            try:
+                session.rollback()
+            except:
+                pass
+    else:
+        logger.info(f"Dataset not found in database: {dataset_id}")
+    
+    # 4. Clean up processing status (always succeeds)
+    try:
         if dataset_id in processing_status:
             del processing_status[dataset_id]
-        
-        return {
-            "message": "Dataset deleted successfully",
-            "datasetId": dataset_id,
-        }
-        
+            success_count += 1
+            logger.info(f"Cleared processing status for: {dataset_id}")
     except Exception as e:
+        errors.append(f"Status cleanup error: {str(e)}")
+        logger.warning(f"Failed to clear processing status for {dataset_id}: {e}")
+    
+    # Determine response
+    if not dataset_existed and success_count == 0:
+        # Nothing was found at all
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete dataset: {str(e)}",
+            status_code=404, 
+            detail="Dataset not found - no files or database entry exists"
         )
+    
+    # Build response
+    response = {
+        "message": "Dataset deleted successfully" if not errors else "Dataset partially deleted",
+        "datasetId": dataset_id,
+        "deleted": {
+            "database": dataset_existed,
+            "filesRemoved": success_count,
+        }
+    }
+    
+    if errors:
+        response["warnings"] = errors
+        logger.warning(f"Dataset {dataset_id} deleted with errors: {errors}")
+    
+    return response
 
 
 @router.get("/health")
