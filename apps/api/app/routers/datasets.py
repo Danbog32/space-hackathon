@@ -24,6 +24,10 @@ class DatasetResponse:
             "tileUrl": dataset.tile_url,
             "levels": json.loads(dataset.levels),
             "pixelSize": json.loads(dataset.pixel_size),
+            "sourceFormat": dataset.source_format,
+            "sourceFile": dataset.source_file,
+            "cogFile": dataset.cog_file,
+            "isDynamic": dataset.is_dynamic,
             "metadata": (
                 json.loads(dataset.metadata_)
                 if isinstance(dataset.metadata_, str)

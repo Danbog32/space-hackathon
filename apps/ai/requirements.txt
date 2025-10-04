@@ -5,7 +5,7 @@ python-dotenv==1.0.0
 httpx==0.26.0
 numpy==1.26.2
 pillow==10.1.0
-faiss-cpu==1.7.4
+faiss-cpu==1.8.0
 # CLIP - optional, falls back to stub if not available
 # open-clip-torch==2.23.0
 # torch==2.1.2

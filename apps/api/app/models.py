@@ -11,10 +11,14 @@ class Dataset(SQLModel, table=True):
     id: str = Field(primary_key=True)
     name: str
     description: Optional[str] = None
-    tile_type: str = Field(default="dzi")  # dzi, tms, iiif
+    tile_type: str = Field(default="dzi")  # dzi, tms, iiif, cog
     tile_url: str
     levels: str  # JSON array stored as string
     pixel_size: str  # JSON tuple stored as string
+    source_format: Optional[str] = Field(default=None)  # Original format (IMG, TIF, JPG, etc.)
+    source_file: Optional[str] = Field(default=None)  # Path to source file
+    cog_file: Optional[str] = Field(default=None)  # Path to COG file
+    is_dynamic: bool = Field(default=False)  # Dynamic processing flag
     metadata_: Optional[Dict[str, Any]] = Field(
         default=None,
         sa_column=Column("metadata", JSON),

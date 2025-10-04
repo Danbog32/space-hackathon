@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import OpenSeadragon from "openseadragon";
 import { useViewerStore } from "@/store/viewerStore";
 import { api } from "@/lib/api";
 import type { CreateAnnotation } from "@astro-zoom/proto";
@@ -16,31 +15,40 @@ type AnnotationType = "point" | "rect" | "polygon";
 export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
   const viewerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const osdRef = useRef<OpenSeadragon.Viewer | null>(null);
+  const osdRef = useRef<any>(null);
+  const [isClient, setIsClient] = useState(false);
   const [annotationType, setAnnotationType] = useState<AnnotationType>("rect");
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const annotations = useViewerStore((state) => state.annotations);
   const addAnnotation = useViewerStore((state) => state.addAnnotation);
 
+  // Ensure we're on the client side
   useEffect(() => {
-    if (!viewerRef.current || osdRef.current) return;
+    setIsClient(true);
+  }, []);
 
-    osdRef.current = OpenSeadragon({
-      element: viewerRef.current,
-      prefixUrl: "//openseadragon.github.io/openseadragon/images/",
-      tileSources: tileSource,
-      showNavigationControl: true,
-      navigationControlAnchor: OpenSeadragon.ControlAnchor.BOTTOM_RIGHT,
+  useEffect(() => {
+    if (!isClient || !viewerRef.current || osdRef.current) return;
+
+    // Dynamically import OpenSeadragon only on client side
+    import("openseadragon").then((OpenSeadragon) => {
+      osdRef.current = OpenSeadragon.default({
+        element: viewerRef.current,
+        prefixUrl: "//openseadragon.github.io/openseadragon/images/",
+        tileSources: tileSource,
+        showNavigationControl: true,
+        navigationControlAnchor: OpenSeadragon.default.ControlAnchor.BOTTOM_RIGHT,
+      });
+
+      return () => {
+        if (osdRef.current) {
+          osdRef.current.destroy();
+          osdRef.current = null;
+        }
+      };
     });
-
-    return () => {
-      if (osdRef.current) {
-        osdRef.current.destroy();
-        osdRef.current = null;
-      }
-    };
-  }, [tileSource]);
+  }, [tileSource, isClient]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -173,6 +181,18 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
       }
     }
   };
+
+  // Show loading state while OpenSeadragon loads
+  if (!isClient) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-black">
+        <div className="text-center">
+          <div className="mb-4 text-6xl">✏️</div>
+          <p className="text-xl text-gray-400">Loading annotator...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative h-full w-full">

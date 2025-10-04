@@ -28,6 +28,7 @@ export function DatasetList() {
   }
 
   if (error) {
+    console.log(error);
     return (
       <div className="rounded-lg border border-red-900 bg-red-950/20 p-6 text-red-400">
         <p className="font-semibold">Error loading datasets</p>

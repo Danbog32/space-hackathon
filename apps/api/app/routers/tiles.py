@@ -4,12 +4,23 @@ import math
 import xml.etree.ElementTree as ET
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
+import io
+import numpy as np
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from app.config import TILE_BASE
+
+# COG support imports
+try:
+    import rasterio
+    from rasterio.windows import Window
+    from PIL import Image
+    COG_AVAILABLE = True
+except ImportError:
+    COG_AVAILABLE = False
 
 router = APIRouter()
 
@@ -87,13 +98,87 @@ def _dataset_level_metadata(dataset_id: str) -> Tuple[Path, Dict[int, Dict[str, 
     )
 
 
+def normalize_to_uint8(data: np.ndarray) -> np.ndarray:
+    """Normalize data to 0-255 range for display."""
+    if data.dtype == np.uint8:
+        return data
+    
+    # Handle different data types
+    if data.dtype in [np.float32, np.float64]:
+        # Float data - normalize to 0-1 then scale to 0-255
+        data_min = np.nanmin(data)
+        data_max = np.nanmax(data)
+        
+        if data_max > data_min:
+            normalized = ((data - data_min) / (data_max - data_min) * 255).astype(np.uint8)
+        else:
+            normalized = np.zeros_like(data, dtype=np.uint8)
+    else:
+        # Integer data - scale appropriately
+        data_min = np.min(data)
+        data_max = np.max(data)
+        
+        if data_max > 255:
+            # Scale down
+            normalized = ((data - data_min) / (data_max - data_min) * 255).astype(np.uint8)
+        else:
+            normalized = data.astype(np.uint8)
+    
+    return normalized
+
+
+def get_cog_path(dataset_id: str) -> Optional[Path]:
+    """Get COG file path for dataset."""
+    cog_path = Path(TILE_BASE) / f"{dataset_id}.cog.tif"
+    return cog_path if cog_path.exists() else None
+
+
+def generate_dzi_from_cog(cog_path: Path) -> Response:
+    """Generate DZI descriptor from COG metadata."""
+    if not COG_AVAILABLE:
+        raise HTTPException(status_code=500, detail="COG support not available")
+    
+    try:
+        with rasterio.open(cog_path) as src:
+            width, height = src.width, src.height
+            
+            dzi_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<Image xmlns="http://schemas.microsoft.com/deepzoom/2008"
+       Format="jpg"
+       Overlap="0"
+       TileSize="256">
+  <Size Width="{width}" Height="{height}"/>
+</Image>'''
+            
+            return Response(
+                content=dzi_content,
+                media_type="application/xml",
+                headers={"Cache-Control": "public, max-age=31536000"}
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading COG: {str(e)}")
+
+
+@router.get("/{dataset_id}")
+async def get_dataset_base(dataset_id: str):
+    """Serve DZI info for base dataset path - OpenSeadragon compatibility."""
+    return await get_dzi_info(dataset_id)
+
+
 @router.get("/{dataset_id}/info.dzi")
 async def get_dzi_info(dataset_id: str):
-    """Serve DZI XML descriptor."""
+    """Serve DZI XML descriptor - supports both DZI and COG datasets."""
+    
+    # Check for COG first
+    cog_path = get_cog_path(dataset_id)
+    if cog_path:
+        return generate_dzi_from_cog(cog_path)
+    
+    # Fall back to existing DZI
     tile_path = Path(TILE_BASE) / dataset_id / "info.dzi"
     
     if not tile_path.exists():
-        raise HTTPException(status_code=404, detail="DZI info not found")
+        raise HTTPException(status_code=404, detail="Dataset not found")
     
     return FileResponse(
         tile_path,
@@ -144,7 +229,68 @@ def _resolve_tile(dataset_id: str, level: int, col: int, row: int, ext: str):
     return candidate_path, media_types.get(ext, "image/jpeg")
 
 
+@router.get("/{dataset_id}/cog/{level}/{col}_{row}.{ext}")
+async def get_cog_tile(dataset_id: str, level: int, col: int, row: int, ext: str):
+    """Serve tiles from Cloud Optimized GeoTIFF."""
+    
+    if not COG_AVAILABLE:
+        raise HTTPException(status_code=500, detail="COG support not available")
+    
+    cog_path = get_cog_path(dataset_id)
+    if not cog_path:
+        # Fall back to DZI tiles
+        return await get_tile(dataset_id, level, col, row, ext, Request)
+    
+    try:
+        with rasterio.open(cog_path) as src:
+            # Calculate tile bounds based on level
+            tile_size = 256
+            scale_factor = 2 ** level
+            
+            col_off = col * tile_size * scale_factor
+            row_off = row * tile_size * scale_factor
+            width = tile_size * scale_factor
+            height = tile_size * scale_factor
+            
+            # Define window
+            window = Window(col_off, row_off, width, height)
+            
+            # Read region efficiently (this is the magic of COG!)
+            if src.count == 1:
+                # Grayscale
+                data = src.read(1, window=window)
+                # Convert to RGB for display
+                rgb_data = np.stack([data, data, data], axis=2)
+            elif src.count >= 3:
+                # RGB or multispectral
+                rgb_data = np.transpose(src.read([1, 2, 3], window=window), (1, 2, 0))
+            else:
+                raise ValueError(f"Unsupported band count: {src.count}")
+            
+            # Normalize data
+            rgb_data = normalize_to_uint8(rgb_data)
+            
+            # Convert to image
+            img = Image.fromarray(rgb_data)
+            img = img.resize((tile_size, tile_size), Image.Resampling.LANCZOS)
+            
+            # Return as response
+            output = io.BytesIO()
+            img.save(output, format='JPEG', quality=85)
+            output.seek(0)
+            
+            return Response(
+                content=output.getvalue(),
+                media_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=31536000"}
+            )
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"COG processing error: {str(e)}")
+
+
 @router.get("/{dataset_id}/{level}/{col}_{row}.{ext}")
+@router.head("/{dataset_id}/{level}/{col}_{row}.{ext}")
 async def get_tile(dataset_id: str, level: int, col: int, row: int, ext: str, request: Request):
     """
     Serve individual tile image.
@@ -153,7 +299,19 @@ async def get_tile(dataset_id: str, level: int, col: int, row: int, ext: str, re
     - Serves WebP to supporting browsers (25-35% smaller)
     - Long-term caching (tiles are immutable)
     - Efficient content negotiation
+    - Falls back to COG if available
     """
+    
+    # Check for COG first
+    cog_path = get_cog_path(dataset_id)
+    if cog_path and COG_AVAILABLE:
+        try:
+            return await get_cog_tile(dataset_id, level, col, row, ext)
+        except Exception:
+            # Fall back to DZI tiles if COG fails
+            pass
+    
+    # Serve DZI tiles
     tile_path, media_type = _resolve_tile(dataset_id, level, col, row, ext)
     
     # Check if browser supports WebP and we have a WebP version
@@ -169,11 +327,29 @@ async def get_tile(dataset_id: str, level: int, col: int, row: int, ext: str, re
         "Vary": "Accept",  # Cache varies by Accept header
     }
 
+    # For HEAD requests, return just headers without body
+    if request.method == "HEAD":
+        return Response(
+            status_code=200,
+            headers={
+                **headers,
+                "Content-Type": media_type,
+                "Content-Length": str(tile_path.stat().st_size),
+            }
+        )
+
     return FileResponse(
         tile_path,
         media_type=media_type,
         headers=headers,
     )
+
+
+@router.get("/{dataset_id}/files/{level}/{col}_{row}.{ext}")
+@router.head("/{dataset_id}/files/{level}/{col}_{row}.{ext}")
+async def get_dzi_files_tile(dataset_id: str, level: int, col: int, row: int, ext: str, request: Request):
+    """Serve tiles following the Deep Zoom naming convention (files)."""
+    return await get_tile(dataset_id, level, col, row, ext, request)
 
 
 @router.get("/{dataset_id}/info_files/{level}/{col}_{row}.{ext}")
@@ -202,12 +378,49 @@ async def get_dzi_tile(dataset_id: str, level: int, col: int, row: int, ext: str
         tile_path,
         media_type=media_type,
         headers=headers,
-    )
+        )
+
+
+@router.get("/{dataset_id}/cog/validate")
+async def validate_cog_dataset(dataset_id: str):
+    """Validate COG file for dataset."""
+    
+    if not COG_AVAILABLE:
+        raise HTTPException(status_code=500, detail="COG support not available")
+    
+    cog_path = get_cog_path(dataset_id)
+    if not cog_path:
+        raise HTTPException(status_code=404, detail="COG file not found")
+    
+    try:
+        # Import COG validator
+        import sys
+        sys.path.append(str(Path(__file__).parent.parent.parent.parent / "infra"))
+        from cog_validator import COGValidator
+        
+        validator = COGValidator()
+        result = validator.validate_cog(str(cog_path))
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
 
 
 @router.get("/{dataset_id}/thumbnail.jpg")
 async def get_thumbnail(dataset_id: str):
-    """Serve dataset thumbnail (optional)."""
+    """Serve dataset thumbnail - supports both DZI and COG."""
+    
+    # Try COG first
+    cog_path = get_cog_path(dataset_id)
+    if cog_path and COG_AVAILABLE:
+        try:
+            # Generate thumbnail from COG
+            return await get_cog_tile(dataset_id, 0, 0, 0, "jpg")
+        except Exception:
+            # Fall back to DZI thumbnail
+            pass
+    
     # Try to serve level 0 tile as thumbnail
     tile_path = Path(TILE_BASE) / dataset_id / "0" / "0_0.jpg"
     

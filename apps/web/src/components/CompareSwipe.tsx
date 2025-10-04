@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import OpenSeadragon from "openseadragon";
 
 interface CompareSwipeProps {
   tileSource: string;
@@ -12,92 +11,101 @@ export function CompareSwipe({ tileSource, tileSourceB }: CompareSwipeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerARef = useRef<HTMLDivElement>(null);
   const viewerBRef = useRef<HTMLDivElement>(null);
-  const osdARef = useRef<OpenSeadragon.Viewer | null>(null);
-  const osdBRef = useRef<OpenSeadragon.Viewer | null>(null);
+  const osdARef = useRef<any>(null);
+  const osdBRef = useRef<any>(null);
+  const [isClient, setIsClient] = useState(false);
   const [dividerPosition, setDividerPosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Ensure we're on the client side
   useEffect(() => {
-    if (!viewerARef.current || !viewerBRef.current) return;
+    setIsClient(true);
+  }, []);
 
-    // Create both viewers
-    osdARef.current = OpenSeadragon({
-      element: viewerARef.current,
-      prefixUrl: "//openseadragon.github.io/openseadragon/images/",
-      tileSources: tileSource,
-      showNavigationControl: false,
-      animationTime: 0.5,
-    });
+  useEffect(() => {
+    if (!isClient || !viewerARef.current || !viewerBRef.current) return;
 
-    osdBRef.current = OpenSeadragon({
-      element: viewerBRef.current,
-      prefixUrl: "//openseadragon.github.io/openseadragon/images/",
-      tileSources: tileSourceB || tileSource,
-      showNavigationControl: false,
-      animationTime: 0.5,
-    });
+    // Dynamically import OpenSeadragon only on client side
+    import("openseadragon").then((OpenSeadragon) => {
+      // Create both viewers
+      osdARef.current = OpenSeadragon.default({
+        element: viewerARef.current!,
+        prefixUrl: "//openseadragon.github.io/openseadragon/images/",
+        tileSources: tileSource,
+        showNavigationControl: false,
+        animationTime: 0.5,
+      });
 
-    // Sync zoom and pan between viewers while avoiding recursive updates
-    const panSyncing = new WeakMap<OpenSeadragon.Viewer, boolean>();
-    const zoomSyncing = new WeakMap<OpenSeadragon.Viewer, boolean>();
+      osdBRef.current = OpenSeadragon.default({
+        element: viewerBRef.current!,
+        prefixUrl: "//openseadragon.github.io/openseadragon/images/",
+        tileSources: tileSourceB || tileSource,
+        showNavigationControl: false,
+        animationTime: 0.5,
+      });
 
-    panSyncing.set(osdARef.current, false);
-    panSyncing.set(osdBRef.current, false);
-    zoomSyncing.set(osdARef.current, false);
-    zoomSyncing.set(osdBRef.current, false);
+      // Sync zoom and pan between viewers while avoiding recursive updates
+      const panSyncing = new WeakMap<any, boolean>();
+      const zoomSyncing = new WeakMap<any, boolean>();
 
-    const syncViewports = (
-      sourceViewer: OpenSeadragon.Viewer,
-      targetViewer: OpenSeadragon.Viewer
-    ) => {
-      const handleZoom = () => {
-        if (!sourceViewer.viewport || !targetViewer.viewport) return;
-        if (zoomSyncing.get(targetViewer)) return;
+      panSyncing.set(osdARef.current, false);
+      panSyncing.set(osdBRef.current, false);
+      zoomSyncing.set(osdARef.current, false);
+      zoomSyncing.set(osdBRef.current, false);
 
-        zoomSyncing.set(targetViewer, true);
-        try {
-          const zoom = sourceViewer.viewport.getZoom();
-          const refPoint = sourceViewer.viewport.getCenter();
-          targetViewer.viewport.zoomTo(zoom, refPoint, true);
-        } finally {
-          zoomSyncing.set(targetViewer, false);
-        }
+      const syncViewports = (
+        sourceViewer: any,
+        targetViewer: any
+      ) => {
+        const handleZoom = () => {
+          if (!sourceViewer.viewport || !targetViewer.viewport) return;
+          if (zoomSyncing.get(targetViewer)) return;
+
+          zoomSyncing.set(targetViewer, true);
+          try {
+            const zoom = sourceViewer.viewport.getZoom();
+            const refPoint = sourceViewer.viewport.getCenter();
+            targetViewer.viewport.zoomTo(zoom, refPoint, true);
+          } finally {
+            zoomSyncing.set(targetViewer, false);
+          }
+        };
+
+        const handlePan = () => {
+          if (!sourceViewer.viewport || !targetViewer.viewport) return;
+          if (panSyncing.get(targetViewer)) return;
+
+          panSyncing.set(targetViewer, true);
+          try {
+            const center = sourceViewer.viewport.getCenter();
+            targetViewer.viewport.panTo(center, true);
+          } finally {
+            panSyncing.set(targetViewer, false);
+          }
+        };
+
+        sourceViewer.addHandler("zoom", handleZoom);
+        sourceViewer.addHandler("pan", handlePan);
+
+        return () => {
+          sourceViewer.removeHandler("zoom", handleZoom);
+          sourceViewer.removeHandler("pan", handlePan);
+        };
       };
 
-      const handlePan = () => {
-        if (!sourceViewer.viewport || !targetViewer.viewport) return;
-        if (panSyncing.get(targetViewer)) return;
-
-        panSyncing.set(targetViewer, true);
-        try {
-          const center = sourceViewer.viewport.getCenter();
-          targetViewer.viewport.panTo(center, true);
-        } finally {
-          panSyncing.set(targetViewer, false);
-        }
-      };
-
-      sourceViewer.addHandler("zoom", handleZoom);
-      sourceViewer.addHandler("pan", handlePan);
+      const cleanupA = syncViewports(osdARef.current, osdBRef.current);
+      const cleanupB = syncViewports(osdBRef.current, osdARef.current);
 
       return () => {
-        sourceViewer.removeHandler("zoom", handleZoom);
-        sourceViewer.removeHandler("pan", handlePan);
+        cleanupA?.();
+        cleanupB?.();
+        osdARef.current?.destroy();
+        osdBRef.current?.destroy();
+        osdARef.current = null;
+        osdBRef.current = null;
       };
-    };
-
-    const cleanupA = syncViewports(osdARef.current, osdBRef.current);
-    const cleanupB = syncViewports(osdBRef.current, osdARef.current);
-
-    return () => {
-      cleanupA?.();
-      cleanupB?.();
-      osdARef.current?.destroy();
-      osdBRef.current?.destroy();
-      osdARef.current = null;
-      osdBRef.current = null;
-    };
-  }, [tileSource, tileSourceB]);
+    });
+  }, [tileSource, tileSourceB, isClient]);
 
   const handleMouseDown = () => setIsDragging(true);
   const handleMouseUp = () => setIsDragging(false);
@@ -108,6 +116,18 @@ export function CompareSwipe({ tileSource, tileSourceB }: CompareSwipeProps) {
     const percentage = (x / rect.width) * 100;
     setDividerPosition(Math.max(0, Math.min(100, percentage)));
   };
+
+  // Show loading state while OpenSeadragon loads
+  if (!isClient) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-black">
+        <div className="text-center">
+          <div className="mb-4 text-6xl">🔄</div>
+          <p className="text-xl text-gray-400">Loading comparison viewer...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
