@@ -10,6 +10,7 @@ Built for a 36-hour hackathon, Astro-Zoom lets you explore massive astronomical 
 
 ## ✨ Features
 
+- **📤 Image Upload** — Upload your own images via web UI with automatic tile processing
 - **🔍 Deep Zoom Navigation** — Explore gigapixel images with smooth pan/zoom using OpenSeadragon
 - **🤖 AI Search** — Find features with natural language queries powered by CLIP embeddings
 - **✏️ Annotations** — Create points, rectangles, and polygons with labels
@@ -110,9 +111,25 @@ Wait ~30s for services to start, then visit http://localhost:3000.
 
 ## 📖 Usage
 
-### Using Real NASA Data
+### Uploading Your Own Images
 
-The project includes mock sample tiles by default. To use the **real 209MB NASA Andromeda image**:
+The easiest way to add your own high-resolution images is through the web interface:
+
+1. **Start the services:** `pnpm dev`
+2. **Navigate to** http://localhost:3000
+3. **Click "Upload Image"** button
+4. **Select or drag-and-drop** your image (JPG, PNG, TIFF up to 500MB)
+5. **Enter name and description**
+6. **Wait for processing** (10-30 minutes depending on size)
+7. **View your dataset!**
+
+The system will automatically generate optimized DZI tiles with progress tracking.
+
+**Supported formats:** JPG, PNG, TIFF • **Max size:** 500MB • **Min dimensions:** 256×256px
+
+### Using Real NASA Data (Manual Processing)
+
+The project includes mock sample tiles by default. To manually process the **real 209MB NASA Andromeda image**:
 
 ```bash
 # Install tiling dependencies
@@ -255,22 +272,48 @@ pnpm test
 
 ## 📊 Adding Your Own Datasets
 
-### 1. Create DZI Tiles
+### Option 1: Web Upload (Recommended)
 
-Use [Vips](https://www.libvips.org/) or [OpenSlide](https://openslide.org/) to generate DZI pyramids:
+The easiest way! Upload through the web interface at http://localhost:3000:
+
+1. Click **"Upload Image"** button
+2. Select your image (JPG, PNG, or TIFF up to 500MB)
+3. Enter dataset name and description
+4. System automatically:
+   - Validates the image
+   - Generates multi-resolution DZI tiles
+   - Creates database entry
+   - Indexes for search
+
+**API Upload:**
 
 ```bash
-# With ImageMagick + vips
-vips dzsave your_image.tif tiles/my-dataset
+curl -X POST http://localhost:8000/uploads/upload \
+  -F "file=@your-image.jpg" \
+  -F "name=My Dataset" \
+  -F "description=Optional description"
 
-# This creates:
-# tiles/my-dataset/info.dzi
-# tiles/my-dataset/0/0_0.jpg
-# tiles/my-dataset/1/*.jpg
-# ... etc
+# Check processing status
+curl http://localhost:8000/uploads/status/{dataset-id}
 ```
 
-### 2. Register Dataset
+### Option 2: Manual Tile Generation
+
+For advanced use cases or external tile generation:
+
+**1. Create DZI Tiles**
+
+Use [Vips](https://www.libvips.org/), [OpenSlide](https://openslide.org/), or Python:
+
+```bash
+# With vips
+vips dzsave your_image.tif infra/tiles/my-dataset
+
+# Or use the provided script
+python infra/process_real_image.py  # Edit paths in script
+```
+
+**2. Register Dataset**
 
 Add to `apps/api/app/seed.py`:
 
@@ -287,7 +330,7 @@ dataset = Dataset(
 session.add(dataset)
 ```
 
-### 3. Build Search Index
+**3. Build Search Index** (optional)
 
 ```bash
 cd apps/ai
@@ -364,6 +407,12 @@ FastAPI automatically generates OpenAPI docs:
 
 - `GET /tiles/{dataset}/info.dzi` — DZI descriptor
 - `GET /tiles/{dataset}/{level}/{col}_{row}.jpg` — Tile image
+
+**Uploads**
+
+- `POST /uploads/upload` — Upload and process image
+- `GET /uploads/status/{id}` — Check processing status
+- `DELETE /uploads/{id}` — Delete dataset and tiles
 
 ## 🤝 Contributing
 

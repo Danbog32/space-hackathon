@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { UploadPrompt } from "./UploadPrompt";
 
 export function DatasetList() {
   const {
@@ -38,8 +39,8 @@ export function DatasetList() {
 
   if (!datasets || datasets.length === 0) {
     return (
-      <div className="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500">
-        <p>No datasets available</p>
+      <div className="grid gap-4 md:grid-cols-1">
+        <UploadPrompt />
       </div>
     );
   }
@@ -66,6 +67,7 @@ export function DatasetList() {
           </div>
         </Link>
       ))}
+      <UploadPrompt />
     </div>
   );
 }

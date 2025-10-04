@@ -15,7 +15,18 @@ export default function Home() {
         </header>
 
         <section className="mb-12">
-          <h2 className="text-2xl font-semibold mb-6">Available Datasets</h2>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-semibold">Available Datasets</h2>
+            <Link
+              href="/upload"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Upload Image
+            </Link>
+          </div>
           <DatasetList />
         </section>
 

@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.config import CORS_ORIGINS
 from app.db import create_db_and_tables
-from app.routers import datasets, features, annotations, search, tiles, auth as auth_router
+from app.routers import datasets, features, annotations, search, tiles, auth as auth_router, uploads
 from app.seed import seed_database
 
 # Rate limiter
@@ -55,6 +55,7 @@ app.include_router(features.router, prefix="/features", tags=["features"])
 app.include_router(annotations.router, prefix="/annotations", tags=["annotations"])
 app.include_router(search.router, prefix="/search", tags=["search"])
 app.include_router(tiles.router, prefix="/tiles", tags=["tiles"])
+app.include_router(uploads.router, prefix="/uploads", tags=["uploads"])
 
 
 @app.get("/health")
