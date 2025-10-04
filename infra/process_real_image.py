@@ -27,6 +27,10 @@ except ImportError:
     print("Please run: pip install requests pillow tqdm")
     sys.exit(1)
 
+# Disable PIL's decompression bomb protection for very large NASA images
+# The Andromeda image is 42208x9870 = 416M pixels which exceeds the default 178M limit
+Image.MAX_IMAGE_PIXELS = None
+
 
 # Configuration
 IMAGE_URL = "https://assets.science.nasa.gov/content/dam/science/missions/hubble/galaxies/andromeda/Hubble_M31Mosaic_2025_42208x9870_STScI-01JGY8MZB6RAYKZ1V4CHGN37Q6.jpg"
