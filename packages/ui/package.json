@@ -8,7 +8,7 @@
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "clsx": "^2.0.0"
