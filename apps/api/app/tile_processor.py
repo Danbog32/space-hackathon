@@ -26,7 +26,7 @@ class TileProcessorConfig:
     TILE_SIZE: int = 256
     TILE_OVERLAP: int = 1
     TILE_FORMAT: str = "jpg"
-    TILE_QUALITY: int = 100
+    TILE_QUALITY: int = 90
     MAX_FILE_SIZE_MB: int = 500  # Maximum upload size
     ALLOWED_EXTENSIONS: set = {".jpg", ".jpeg", ".png", ".tiff", ".tif"}
 
