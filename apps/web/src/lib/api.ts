@@ -2,6 +2,28 @@ import type { Dataset, Annotation, CreateAnnotation, SearchResponse } from "@ast
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+export interface UploadResponse {
+  datasetId: string;
+  status: string;
+  message: string;
+  statusUrl?: string;
+  timestamp: string;
+}
+
+export interface ProcessingStatus {
+  datasetId: string;
+  status: "queued" | "processing" | "complete" | "error";
+  progress: number;
+  message: string;
+  timestamp: string;
+  result?: {
+    width: number;
+    height: number;
+    levels: number;
+    totalTiles: number;
+  };
+}
+
 export const api = {
   async getDatasets(): Promise<Dataset[]> {
     const res = await fetch(`${API_BASE}/datasets`);
@@ -57,20 +79,95 @@ export const api = {
   },
 
   async classifyRegion(datasetId: string, bbox: [number, number, number, number]): Promise<any> {
-    const bboxStr = bbox.join(',');
-    const res = await fetch(
-      `${API_BASE}/classify?datasetId=${datasetId}&bbox=${bboxStr}`,
-      { method: "POST" }
-    );
+    const bboxStr = bbox.join(",");
+    const res = await fetch(`${API_BASE}/classify?datasetId=${datasetId}&bbox=${bboxStr}`, {
+      method: "POST",
+    });
     if (!res.ok) throw new Error("Failed to classify region");
     return res.json();
   },
 
-  async detectObjects(query: string, datasetId: string, confidenceThreshold = 0.6, maxResults = 50): Promise<any> {
+  async detectObjects(
+    query: string,
+    datasetId: string,
+    confidenceThreshold = 0.6,
+    maxResults = 50
+  ): Promise<any> {
     const res = await fetch(
-      `${API_BASE}/detect?q=${encodeURIComponent(query)}&datasetId=${datasetId}&confidence_threshold=${confidenceThreshold}&max_results=${maxResults}`
+      `${API_BASE}/detect?q=${encodeURIComponent(
+        query
+      )}&datasetId=${datasetId}&confidence_threshold=${confidenceThreshold}&max_results=${maxResults}`
     );
     if (!res.ok) throw new Error("Failed to detect objects");
     return res.json();
+  },
+
+  async uploadImage(
+    file: File,
+    name: string,
+    description?: string,
+    onProgress?: (progress: number) => void
+  ): Promise<UploadResponse> {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("name", name);
+    if (description) {
+      formData.append("description", description);
+    }
+
+    // Use XMLHttpRequest for upload progress tracking
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable && onProgress) {
+          const progress = (e.loaded / e.total) * 100;
+          onProgress(progress);
+        }
+      });
+
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const response = JSON.parse(xhr.responseText);
+            resolve(response);
+          } catch (e) {
+            reject(new Error("Failed to parse response"));
+          }
+        } else {
+          try {
+            const error = JSON.parse(xhr.responseText);
+            reject(new Error(error.detail || "Upload failed"));
+          } catch (e) {
+            reject(new Error(`Upload failed with status ${xhr.status}`));
+          }
+        }
+      });
+
+      xhr.addEventListener("error", () => {
+        reject(new Error("Network error during upload"));
+      });
+
+      xhr.open("POST", `${API_BASE}/uploads/upload`);
+      xhr.send(formData);
+    });
+  },
+
+  async getProcessingStatus(datasetId: string): Promise<ProcessingStatus> {
+    const res = await fetch(`${API_BASE}/uploads/status/${datasetId}`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error("Processing status not found");
+      }
+      throw new Error("Failed to fetch processing status");
+    }
+    return res.json();
+  },
+
+  async deleteDataset(datasetId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/uploads/${datasetId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error("Failed to delete dataset");
   },
 };

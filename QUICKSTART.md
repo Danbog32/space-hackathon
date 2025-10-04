@@ -50,6 +50,14 @@ This runs:
    - Click twice to create a rectangle
    - Refresh page - annotation persists!
 
+## Upload Your Own Image
+
+1. Click **"Upload Image"** button on homepage
+2. Drag & drop or select an image (JPG, PNG, TIFF)
+3. Enter a name and click "Upload & Process"
+4. Wait for tile generation (progress shown)
+5. View your high-resolution dataset!
+
 ## Quick Test
 
 ```bash
@@ -104,9 +112,9 @@ python3 infra/generate_sample_tiles.py
 
 ## Next Steps
 
+- Upload your own images (click "Upload Image" on homepage)
 - Read [README.md](README.md) for full documentation
 - Explore the code in `apps/web/src/components/`
-- Add your own datasets (see README)
 - Deploy to production
 
 Happy hacking! 🌌
