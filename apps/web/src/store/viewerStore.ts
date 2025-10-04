@@ -23,6 +23,9 @@ interface ViewerState {
 
   gridVisible: boolean;
   toggleGrid: () => void;
+
+  showSnippets: boolean;
+  toggleShowSnippets: () => void;
 }
 
 export const useViewerStore = create<ViewerState>((set) => ({
@@ -52,4 +55,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
 
   gridVisible: false,
   toggleGrid: () => set((state) => ({ gridVisible: !state.gridVisible })),
+
+  showSnippets: true,
+  toggleShowSnippets: () => set((state) => ({ showSnippets: !state.showSnippets })),
 }));

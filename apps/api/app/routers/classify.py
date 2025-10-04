@@ -39,7 +39,7 @@ async def classify_region(
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 f"{AI_URL}/classify",
-                params={"dataset_id": ai_dataset_id, "bbox": bbox_parts},
+                params={"datasetId": ai_dataset_id, "bbox": bbox},
             )
             response.raise_for_status()
             data = response.json()
@@ -50,7 +50,11 @@ async def classify_region(
                 "primary_classification": data.get("primary_classification"),
                 "confidence": data.get("confidence"),
                 "all_classifications": data.get("all_classifications", []),
-                "processing_time_ms": data.get("processing_time_ms", 0)
+                "processing_time_ms": data.get("processing_time_ms", 0),
+                "snippet_preview": data.get("snippet_preview"),  # ← Added!
+                "snippet_size": data.get("snippet_size"),        # ← Added!
+                "model": data.get("model"),                      # ← Added!
+                "source_info": data.get("source_info"),          # ← Added!
             }
     except ValueError as e:
         raise HTTPException(
