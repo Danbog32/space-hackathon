@@ -1,0 +1,76 @@
+version: "3.8"
+
+services:
+  web:
+    build:
+      context: ../
+      dockerfile: infra/Dockerfile.web
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    volumes:
+      - ../apps/web:/app/apps/web
+      - ../packages:/app/packages
+      - /app/node_modules
+      - /app/apps/web/node_modules
+    depends_on:
+      - api
+      - ai
+    networks:
+      - astro-net
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ../
+      dockerfile: infra/Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:////data/astro.db
+      - AI_URL=http://ai:8001
+      - JWT_SECRET=devsecret_change_in_production
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+    volumes:
+      - ../apps/api:/app/apps/api
+      - ../infra/tiles:/app/infra/tiles
+      - api-data:/data
+    networks:
+      - astro-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ai:
+    build:
+      context: ../
+      dockerfile: infra/Dockerfile.ai
+    ports:
+      - "8001:8001"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ../apps/ai:/app/apps/ai
+      - ../infra/tiles:/app/infra/tiles
+      - ai-indices:/app/apps/ai/indices
+    networks:
+      - astro-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  api-data:
+  ai-indices:
+
+networks:
+  astro-net:
+    driver: bridge

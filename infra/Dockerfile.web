@@ -1,0 +1,25 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm@8.15.0
+
+# Copy workspace files
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY turbo.json ./
+COPY packages ./packages
+COPY apps/web ./apps/web
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Build packages
+RUN pnpm -r build --filter=@astro-zoom/proto --filter=@astro-zoom/ui
+
+WORKDIR /app/apps/web
+
+EXPOSE 3000
+
+CMD ["pnpm", "dev"]
+
