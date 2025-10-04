@@ -36,7 +36,7 @@ export default function UploadPage() {
     }
 
     // Validate file size (500MB max)
-    const maxSizeMB = 500;
+    const maxSizeMB = 1500;
     const fileSizeMB = file.size / (1024 * 1024);
     if (fileSizeMB > maxSizeMB) {
       setError(`File too large: ${fileSizeMB.toFixed(1)}MB. Maximum: ${maxSizeMB}MB`);
@@ -169,7 +169,12 @@ export default function UploadPage() {
             className="text-blue-400 hover:text-blue-300 transition-colors inline-flex items-center gap-2 mb-4"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
             Back to Home
           </Link>
@@ -309,8 +314,8 @@ export default function UploadPage() {
               {/* Info Box */}
               <div className="mt-6 p-4 bg-blue-950/30 border border-blue-900/50 rounded-lg">
                 <p className="text-sm text-blue-300">
-                  <strong>Processing time:</strong> Varies based on image size. A 200MB image may take
-                  10-30 minutes. You&apos;ll see real-time progress updates.
+                  <strong>Processing time:</strong> Varies based on image size. A 200MB image may
+                  take 10-30 minutes. You&apos;ll see real-time progress updates.
                 </p>
               </div>
             </>
@@ -360,8 +365,18 @@ export default function UploadPage() {
             <div className="space-y-6">
               <div className="text-center">
                 <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  <svg
+                    className="w-8 h-8 text-green-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
                 </div>
                 <h3 className="text-2xl font-bold text-white mb-2">Processing Complete!</h3>
@@ -381,7 +396,9 @@ export default function UploadPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Total Tiles:</span>
-                  <span className="text-white font-medium">{processingStatus.result.totalTiles}</span>
+                  <span className="text-white font-medium">
+                    {processingStatus.result.totalTiles}
+                  </span>
                 </div>
               </div>
 
@@ -407,7 +424,12 @@ export default function UploadPage() {
             <div className="space-y-6">
               <div className="text-center">
                 <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg
+                    className="w-8 h-8 text-red-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -433,4 +455,3 @@ export default function UploadPage() {
     </div>
   );
 }
-
