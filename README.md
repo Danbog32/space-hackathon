@@ -93,6 +93,8 @@ pnpm dev
 - 🔌 API: http://localhost:8000 (docs at /docs)
 - 🤖 AI: http://localhost:8001
 
+> **⚠️ Troubleshooting:** If you see "Failed to fetch datasets" error, the API server may not be running. See [START_SERVICES.md](START_SERVICES.md) for help.
+
 ### Option 2: Docker Compose
 
 ```bash
