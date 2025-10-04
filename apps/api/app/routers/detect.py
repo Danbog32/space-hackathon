@@ -29,12 +29,15 @@ async def detect_objects(
     - Returns all locations with bounding boxes and confidence scores
     """
     try:
+        # Map frontend dataset IDs to AI service dataset IDs
+        ai_dataset_id = "demo" if datasetId in ["andromeda", "demo"] else datasetId
+        
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
                 f"{AI_URL}/detect",
                 params={
                     "q": q,
-                    "datasetId": datasetId,
+                    "datasetId": ai_dataset_id,
                     "confidence_threshold": confidence_threshold,
                     "max_results": max_results
                 },

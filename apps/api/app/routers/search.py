@@ -25,10 +25,13 @@ async def search(
     Rate limited to prevent abuse.
     """
     try:
+        # Map frontend dataset IDs to AI service dataset IDs
+        ai_dataset_id = "demo" if datasetId in ["andromeda", "demo"] else datasetId
+        
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
                 f"{AI_URL}/search",
-                params={"q": q, "datasetId": datasetId, "topK": topK},
+                params={"q": q, "datasetId": ai_dataset_id, "topK": topK},
             )
             response.raise_for_status()
             data = response.json()

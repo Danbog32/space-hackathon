@@ -33,10 +33,13 @@ async def classify_region(
         if len(bbox_parts) != 4:
             raise ValueError("bbox must have 4 values: x,y,width,height")
         
+        # Map frontend dataset IDs to AI service dataset IDs
+        ai_dataset_id = "demo" if datasetId in ["andromeda", "demo"] else datasetId
+        
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 f"{AI_URL}/classify",
-                params={"dataset_id": datasetId, "bbox": bbox_parts},
+                params={"dataset_id": ai_dataset_id, "bbox": bbox_parts},
             )
             response.raise_for_status()
             data = response.json()
