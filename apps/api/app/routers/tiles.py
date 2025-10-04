@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Tuple
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from app.config import TILE_BASE
@@ -145,26 +145,63 @@ def _resolve_tile(dataset_id: str, level: int, col: int, row: int, ext: str):
 
 
 @router.get("/{dataset_id}/{level}/{col}_{row}.{ext}")
-async def get_tile(dataset_id: str, level: int, col: int, row: int, ext: str):
-    """Serve individual tile image."""
+async def get_tile(dataset_id: str, level: int, col: int, row: int, ext: str, request: Request):
+    """
+    Serve individual tile image.
+    
+    Optimizations:
+    - Serves WebP to supporting browsers (25-35% smaller)
+    - Long-term caching (tiles are immutable)
+    - Efficient content negotiation
+    """
     tile_path, media_type = _resolve_tile(dataset_id, level, col, row, ext)
+    
+    # Check if browser supports WebP and we have a WebP version
+    accept_header = request.headers.get("accept", "")
+    if "image/webp" in accept_header and ext in ["jpg", "jpeg"]:
+        webp_path = tile_path.with_suffix(".webp")
+        if webp_path.exists():
+            tile_path = webp_path
+            media_type = "image/webp"
+    
+    headers = {
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "Vary": "Accept",  # Cache varies by Accept header
+    }
 
     return FileResponse(
         tile_path,
         media_type=media_type,
-        headers={"Cache-Control": "public, max-age=31536000"},
+        headers=headers,
     )
 
 
 @router.get("/{dataset_id}/info_files/{level}/{col}_{row}.{ext}")
-async def get_dzi_tile(dataset_id: str, level: int, col: int, row: int, ext: str):
-    """Serve tiles following the Deep Zoom naming convention (<name>_files)."""
+async def get_dzi_tile(dataset_id: str, level: int, col: int, row: int, ext: str, request: Request):
+    """
+    Serve tiles following the Deep Zoom naming convention (<name>_files).
+    
+    Includes WebP content negotiation for modern browsers.
+    """
     tile_path, media_type = _resolve_tile(dataset_id, level, col, row, ext)
+    
+    # Check if browser supports WebP and we have a WebP version
+    accept_header = request.headers.get("accept", "")
+    if "image/webp" in accept_header and ext in ["jpg", "jpeg"]:
+        webp_path = tile_path.with_suffix(".webp")
+        if webp_path.exists():
+            tile_path = webp_path
+            media_type = "image/webp"
+    
+    headers = {
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "Vary": "Accept",
+    }
 
     return FileResponse(
         tile_path,
         media_type=media_type,
-        headers={"Cache-Control": "public, max-age=31536000"},
+        headers=headers,
     )
 
 

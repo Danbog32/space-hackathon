@@ -20,19 +20,52 @@ def seed_database():
         
         print("Seeding database with sample data...")
         
-        # Create Andromeda sample dataset
+        # Detect if we're using real tiles or mock tiles
+        # Real NASA image is 42208 x 9870
+        # Mock/sample is 1024 x 1024
+        from pathlib import Path
+        import xml.etree.ElementTree as ET
+        
+        # Try to read actual DZI metadata
+        dzi_path = Path(__file__).parent.parent.parent.parent / "infra" / "tiles" / "andromeda" / "info.dzi"
+        
+        width, height = 1024, 1024  # Default to mock
+        is_real_dataset = False
+        
+        if dzi_path.exists():
+            try:
+                tree = ET.parse(dzi_path)
+                size_node = tree.find("{http://schemas.microsoft.com/deepzoom/2008}Size")
+                if size_node is not None:
+                    width = int(size_node.attrib.get("Width", "1024"))
+                    height = int(size_node.attrib.get("Height", "1024"))
+                    is_real_dataset = width > 10000  # Real NASA image is 42208px wide
+            except Exception:
+                pass
+        
+        # Create Andromeda dataset with appropriate metadata
+        if is_real_dataset:
+            name = "Andromeda Galaxy (NASA Hubble 2025)"
+            description = "High-resolution Hubble Space Telescope mosaic of the Andromeda Galaxy (M31). 42208x9870 pixels of stunning detail showing the spiral structure, star-forming regions, and galactic core."
+            date = "2025-01-01"
+        else:
+            name = "Andromeda Galaxy (Sample)"
+            description = "A sample deep-zoom image of the Andromeda Galaxy M31"
+            date = "2015-01-05"
+        
         andromeda = Dataset(
             id="andromeda",
-            name="Andromeda Galaxy (Sample)",
-            description="A sample deep-zoom image of the Andromeda Galaxy M31",
+            name=name,
+            description=description,
             tile_type="dzi",
             tile_url="/tiles/andromeda",
-            levels=json.dumps([0, 1, 2]),
-            pixel_size=json.dumps([4096, 4096]),
+            levels=json.dumps([0, 1, 2]),  # Will be dynamically detected by tile server
+            pixel_size=json.dumps([width, height]),
             metadata_={
                 "telescope": "Hubble Space Telescope",
                 "filter": "Composite RGB",
-                "date": "2015-01-05",
+                "date": date,
+                "is_real_data": is_real_dataset,
             },
         )
         session.add(andromeda)

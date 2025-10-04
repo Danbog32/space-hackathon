@@ -108,10 +108,24 @@ Wait ~30s for services to start, then visit http://localhost:3000.
 
 ## 📖 Usage
 
+### Using Real NASA Data
+
+The project includes mock sample tiles by default. To use the **real 209MB NASA Andromeda image**:
+
+```bash
+# Install tiling dependencies
+pip install -r infra/requirements_tiling.txt
+
+# Process the real image (takes 10-30 minutes)
+python infra/process_real_image.py
+```
+
+This downloads the actual NASA Hubble Andromeda mosaic (42208x9870 pixels) and generates an optimized tile pyramid. See `infra/TILE_GENERATION.md` for details.
+
 ### Exploring Datasets
 
 1. Visit http://localhost:3000
-2. Click on "Andromeda Galaxy (Sample)"
+2. Click on "Andromeda Galaxy (Sample)" or "Andromeda Galaxy (NASA Hubble 2025)"
 3. Use mouse to pan/zoom, or:
    - **Scroll** to zoom
    - **Drag** to pan
