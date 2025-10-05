@@ -22,6 +22,7 @@ export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
   const overlays = useViewerStore((state) => state.overlays);
   const upsertOverlay = useViewerStore((state) => state.upsertOverlay);
   const activeOverlayId = useViewerStore((state) => state.activeOverlayId);
+  const overlayMoveEnabled = useViewerStore((state) => state.overlayMoveEnabled);
 
   useEffect(() => {
     if (!viewerRef.current || osdRef.current) return;
@@ -129,7 +130,7 @@ export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
     const overlayItems = overlayItemsRef.current;
 
     const handlePress = (event: OpenSeadragon.ViewerEvent<any>) => {
-      if (!activeOverlayId) return;
+      if (!overlayMoveEnabled || !activeOverlayId) return;
       const targetOverlay = overlaysRef.current.find((overlay) => overlay.id === activeOverlayId);
       const overlayItem = targetOverlay ? overlayItems.get(targetOverlay.id) : null;
       if (!targetOverlay || !overlayItem || !targetOverlay.visible) {
@@ -147,13 +148,12 @@ export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
 
       dragOffsetRef.current = new OpenSeadragon.Point(pointer.x - bounds.x, pointer.y - bounds.y);
       isDraggingOverlayRef.current = true;
-      viewer.setMouseNavEnabled(false);
       event.preventDefaultAction = true;
       event.stopHandlers = true;
     };
 
     const handleDrag = (event: OpenSeadragon.ViewerEvent<any>) => {
-      if (!isDraggingOverlayRef.current || !activeOverlayId) {
+      if (!overlayMoveEnabled || !isDraggingOverlayRef.current || !activeOverlayId) {
         return;
       }
 
@@ -191,7 +191,6 @@ export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
         return;
       }
       isDraggingOverlayRef.current = false;
-      viewer.setMouseNavEnabled(true);
 
       const finalOverlay = lastDraggedOverlayRef.current;
       dragOffsetRef.current = null;
@@ -240,7 +239,15 @@ export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
       viewer.removeHandler("canvas-release", handleRelease);
       viewer.removeHandler("canvas-exit", handleExit);
     };
-  }, [activeOverlayId, upsertOverlay]);
+  }, [activeOverlayId, overlayMoveEnabled, upsertOverlay]);
+
+  useEffect(() => {
+    if (!overlayMoveEnabled) {
+      isDraggingOverlayRef.current = false;
+      dragOffsetRef.current = null;
+      lastDraggedOverlayRef.current = null;
+    }
+  }, [overlayMoveEnabled]);
 
   // Fly to search result when selected
   useEffect(() => {

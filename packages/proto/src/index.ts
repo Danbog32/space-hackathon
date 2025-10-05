@@ -44,6 +44,7 @@ export const OverlayPositionSchema = z.object({
 export const OverlaySchema = z.object({
   id: z.string(),
   datasetId: z.string(),
+  sourceDatasetId: z.string().optional(),
   name: z.string(),
   tileUrl: z.string(),
   opacity: z.number().min(0).max(1),

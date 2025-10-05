@@ -30,6 +30,8 @@ interface ViewerState {
   removeOverlay: (overlayId: string) => void;
   activeOverlayId: string | null;
   setActiveOverlayId: (overlayId: string | null) => void;
+  overlayMoveEnabled: boolean;
+  setOverlayMoveEnabled: (enabled: boolean) => void;
 }
 
 export const useViewerStore = create<ViewerState>((set) => ({
@@ -76,4 +78,6 @@ export const useViewerStore = create<ViewerState>((set) => ({
     set((state) => ({ overlays: state.overlays.filter((overlay) => overlay.id !== overlayId) })),
   activeOverlayId: null,
   setActiveOverlayId: (overlayId) => set({ activeOverlayId: overlayId }),
+  overlayMoveEnabled: false,
+  setOverlayMoveEnabled: (enabled) => set({ overlayMoveEnabled: enabled }),
 }));

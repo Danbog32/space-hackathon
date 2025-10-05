@@ -8,11 +8,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Input, Toggle } from "@astro-zoom/ui";
 import { api } from "@/lib/api";
 import { useViewerStore } from "@/store/viewerStore";
-import type { Overlay, OverlayPosition } from "@astro-zoom/proto";
+import type { Dataset, Overlay, OverlayPosition } from "@astro-zoom/proto";
 
 interface OverlayManagerProps {
   datasetId: string;
@@ -31,16 +31,38 @@ export function OverlayManager({ datasetId }: OverlayManagerProps) {
   const removeOverlay = useViewerStore((state) => state.removeOverlay);
   const activeOverlayId = useViewerStore((state) => state.activeOverlayId);
   const setActiveOverlayId = useViewerStore((state) => state.setActiveOverlayId);
+  const overlayMoveEnabled = useViewerStore((state) => state.overlayMoveEnabled);
+  const setOverlayMoveEnabled = useViewerStore((state) => state.setOverlayMoveEnabled);
 
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const updateTimersRef = useRef<Map<string, number>>(new Map());
   const updateBufferRef = useRef<Map<string, Parameters<typeof api.updateOverlay>[1]>>(new Map());
 
-  const [uploading, setUploading] = useState(false);
+  const [isBusy, setIsBusy] = useState(false);
+  const [busyMode, setBusyMode] = useState<"none" | "upload" | "link">("none");
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [selectedDatasetId, setSelectedDatasetId] = useState("");
+
+  const { data: datasets } = useQuery<Dataset[]>({
+    queryKey: ["datasets"],
+    queryFn: api.getDatasets,
+  });
+
+  const otherDatasets = useMemo(
+    () => (datasets ?? []).filter((dataset) => dataset.id !== datasetId),
+    [datasets, datasetId]
+  );
+
+  const datasetNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    (datasets ?? []).forEach((dataset) => {
+      map.set(dataset.id, dataset.name);
+    });
+    return map;
+  }, [datasets]);
 
   const sortedOverlays = useMemo(
     () => [...overlays].sort((a, b) => a.name.localeCompare(b.name)),
@@ -171,7 +193,7 @@ export function OverlayManager({ datasetId }: OverlayManagerProps) {
         return;
       }
       if (status.status === "error") {
-        setUploadError(status.message);
+        setErrorMessage(status.message);
         setStatusMessage(null);
         return;
       }
@@ -184,9 +206,10 @@ export function OverlayManager({ datasetId }: OverlayManagerProps) {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    setUploading(true);
+    setIsBusy(true);
+    setBusyMode("upload");
     setUploadProgress(0);
-    setUploadError(null);
+    setErrorMessage(null);
     setStatusMessage("Uploading overlay...");
 
     try {
@@ -202,14 +225,62 @@ export function OverlayManager({ datasetId }: OverlayManagerProps) {
       setStatusMessage("Processing overlay tiles...");
       await pollOverlayStatus(response.overlayId);
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : "Overlay upload failed");
+      setErrorMessage(error instanceof Error ? error.message : "Overlay upload failed");
+      setStatusMessage(null);
     } finally {
-      setUploading(false);
+      setIsBusy(false);
+      setBusyMode("none");
       setUploadProgress(0);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
     }
+  };
+
+  const handleCreateFromDataset = async () => {
+    if (!selectedDatasetId) {
+      setErrorMessage("Select a dataset to add as an overlay");
+      return;
+    }
+
+    setIsBusy(true);
+    setBusyMode("link");
+    setErrorMessage(null);
+    setStatusMessage("Linking overlay dataset...");
+
+    try {
+      const overlay = await api.createOverlayFromDataset({
+        datasetId,
+        sourceDatasetId: selectedDatasetId,
+        position: { x: 0, y: 0, width: 1, rotation: 0 },
+      });
+
+      upsertOverlay(overlay);
+      await queryClient.invalidateQueries({ queryKey: ["overlays", datasetId] });
+      setStatusMessage("Overlay linked to existing dataset.");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to create overlay from dataset"
+      );
+      setStatusMessage(null);
+    } finally {
+      setIsBusy(false);
+      setBusyMode("none");
+      setSelectedDatasetId("");
+    }
+  };
+
+  const handleToggleMoveMode = () => {
+    if (!overlayMoveEnabled) {
+      if (sortedOverlays.length === 0) {
+        setErrorMessage("Add or link an overlay before enabling move mode");
+        return;
+      }
+      if (!activeOverlayId && sortedOverlays.length > 0) {
+        setActiveOverlayId(sortedOverlays[0].id);
+      }
+    }
+    setOverlayMoveEnabled(!overlayMoveEnabled);
   };
 
   return (
@@ -228,14 +299,52 @@ export function OverlayManager({ datasetId }: OverlayManagerProps) {
             variant="secondary"
             size="sm"
             onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
+            disabled={isBusy}
           >
-            {uploading ? "Uploading..." : "Add Overlay"}
+            {busyMode === "upload" ? "Uploading..." : "Add Overlay"}
+          </Button>
+          <Button
+            variant={overlayMoveEnabled ? "primary" : "ghost"}
+            size="sm"
+            onClick={handleToggleMoveMode}
+            disabled={isBusy}
+          >
+            {overlayMoveEnabled ? "Disable Move Mode" : "Enable Move Mode"}
           </Button>
         </div>
       </div>
 
-      {uploading && (
+      <div className="mb-4">
+        <p className="mb-1 text-xs text-gray-400">Overlay an existing dataset</p>
+        <div className="flex gap-2">
+          <select
+            className="flex-1 rounded-md border border-gray-800 bg-gray-900 px-2 py-1 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+            value={selectedDatasetId}
+            onChange={(event) => setSelectedDatasetId(event.target.value)}
+            disabled={isBusy || (datasets !== undefined && otherDatasets.length === 0)}
+          >
+            <option value="">Select dataset</option>
+            {otherDatasets.map((dataset) => (
+              <option key={dataset.id} value={dataset.id}>
+                {dataset.name.slice(0, 10)}
+              </option>
+            ))}
+          </select>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleCreateFromDataset}
+            disabled={isBusy || !selectedDatasetId}
+          >
+            {busyMode === "link" ? "Linking..." : "Add From Dataset"}
+          </Button>
+        </div>
+        {datasets && otherDatasets.length === 0 && (
+          <p className="mt-1 text-[11px] text-gray-500">Upload another dataset to enable linking.</p>
+        )}
+      </div>
+
+      {busyMode === "upload" && (
         <div className="mb-3 space-y-1 text-xs text-gray-300">
           <div className="h-2 w-full overflow-hidden rounded-full bg-gray-800">
             <div
@@ -247,9 +356,9 @@ export function OverlayManager({ datasetId }: OverlayManagerProps) {
         </div>
       )}
 
-      {uploadError && <p className="mb-2 text-xs text-red-400">{uploadError}</p>}
+      {errorMessage && <p className="mb-2 text-xs text-red-400">{errorMessage}</p>}
 
-      {!uploading && statusMessage && (
+      {busyMode !== "upload" && statusMessage && (
         <p className="mb-3 text-xs text-gray-400">{statusMessage}</p>
       )}
 
@@ -277,8 +386,15 @@ export function OverlayManager({ datasetId }: OverlayManagerProps) {
                     variant={isActive ? "primary" : "ghost"}
                     size="sm"
                     onClick={() => setActiveOverlayId(isActive ? null : overlay.id)}
+                    disabled={isBusy && busyMode === "upload"}
                   >
-                    {isActive ? "Stop Editing" : "Edit Placement"}
+                    {isActive
+                      ? overlayMoveEnabled
+                        ? "Moving"
+                        : "Selected"
+                      : overlayMoveEnabled
+                      ? "Set Active"
+                      : "Edit Placement"}
                   </Button>
                 </div>
 
@@ -325,6 +441,12 @@ export function OverlayManager({ datasetId }: OverlayManagerProps) {
                     </div>
                   ))}
                 </div>
+
+                {overlay.sourceDatasetId && (
+                  <p className="mt-2 text-[10px] uppercase tracking-wide text-gray-500">
+                    Source dataset: {datasetNameById.get(overlay.sourceDatasetId) ?? overlay.sourceDatasetId}
+                  </p>
+                )}
 
                 {overlay.metadata?.width && overlay.metadata?.height && (
                   <p className="mt-2 text-[10px] uppercase tracking-wide text-gray-500">

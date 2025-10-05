@@ -127,6 +127,60 @@ export const api = {
     return res.json();
   },
 
+  async createOverlayFromDataset(options: {
+    datasetId: string;
+    sourceDatasetId: string;
+    name?: string;
+    opacity?: number;
+    visible?: boolean;
+    position?: Partial<OverlayPosition>;
+    metadata?: Record<string, unknown>;
+  }): Promise<Overlay> {
+    const {
+      datasetId,
+      sourceDatasetId,
+      name,
+      opacity = 1,
+      visible = true,
+      position,
+      metadata,
+    } = options;
+
+    const res = await fetch(`${API_BASE}/overlays/from-dataset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        datasetId,
+        sourceDatasetId,
+        name,
+        opacity,
+        visible,
+        position: {
+          x: position?.x ?? 0,
+          y: position?.y ?? 0,
+          width: position?.width ?? 1,
+          rotation: position?.rotation ?? 0,
+        },
+        metadata,
+      }),
+    });
+
+    if (!res.ok) {
+      let message = "Failed to link overlay dataset";
+      try {
+        const error = await res.json();
+        if (error?.detail) {
+          message = error.detail;
+        }
+      } catch {
+        // Ignore JSON parsing errors
+      }
+      throw new Error(message);
+    }
+
+    return res.json();
+  },
+
   async deleteOverlay(overlayId: string): Promise<void> {
     const res = await fetch(`${API_BASE}/overlays/${overlayId}`, {
       method: "DELETE",

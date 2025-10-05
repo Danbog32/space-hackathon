@@ -62,6 +62,7 @@ class OverlayResponse:
                 "rotation": overlay.rotation,
             },
             "metadata": metadata,
+            "sourceDatasetId": metadata.get("sourceDatasetId"),
             "createdAt": overlay.created_at.isoformat(),
             "updatedAt": overlay.updated_at.isoformat(),
         }
@@ -80,6 +81,57 @@ class OverlayUpdateRequest(BaseModel):
     visible: Optional[bool] = None
     position: Optional[OverlayPosition] = None
     metadata: Optional[Dict[str, Any]] = None
+
+
+class OverlayFromDatasetRequest(BaseModel):
+    datasetId: str
+    sourceDatasetId: str
+    name: Optional[str] = None
+    opacity: float = 1.0
+    visible: bool = True
+    position: OverlayPosition = OverlayPosition(x=0.0, y=0.0, width=1.0, rotation=0.0)
+    metadata: Optional[Dict[str, Any]] = None
+
+
+def _normalize_metadata(value: Optional[Any]) -> Dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _extract_dataset_overlay_metadata(dataset: Dataset) -> Dict[str, Any]:
+    metadata = _normalize_metadata(dataset.metadata_)
+    try:
+        levels = json.loads(dataset.levels)
+        if isinstance(levels, list):
+            metadata.setdefault("levels", levels)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        pass
+
+    try:
+        pixel_size = json.loads(dataset.pixel_size)
+        if (
+            isinstance(pixel_size, (list, tuple))
+            and len(pixel_size) == 2
+            and all(isinstance(v, (int, float)) for v in pixel_size)
+        ):
+            metadata.setdefault("width", pixel_size[0])
+            metadata.setdefault("height", pixel_size[1])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        pass
+
+    metadata.setdefault("sourceDatasetName", dataset.name)
+    metadata.setdefault("sourceTileUrl", dataset.tile_url)
+    return metadata
 
 
 def process_overlay_background(
@@ -276,6 +328,63 @@ async def create_overlay(
     }
 
 
+@router.post("/from-dataset", response_model=dict, status_code=201)
+async def create_overlay_from_dataset(
+    payload: OverlayFromDatasetRequest,
+    session: Session = Depends(get_session),
+):
+    dataset_id = payload.datasetId.strip()
+    source_dataset_id = payload.sourceDatasetId.strip()
+
+    if not dataset_id or not source_dataset_id:
+        raise HTTPException(status_code=400, detail="datasetId and sourceDatasetId are required")
+
+    if payload.position.width <= 0:
+        raise HTTPException(status_code=400, detail="Position width must be greater than 0")
+
+    dataset = session.get(Dataset, dataset_id)
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Target dataset not found")
+
+    source_dataset = session.get(Dataset, source_dataset_id)
+    if not source_dataset:
+        raise HTTPException(status_code=404, detail="Source dataset not found")
+
+    overlay_id = str(uuid4())
+
+    metadata = _normalize_metadata(payload.metadata)
+    metadata.update(_extract_dataset_overlay_metadata(source_dataset))
+    metadata["sourceDatasetId"] = source_dataset_id
+
+    overlay = Overlay(
+        id=overlay_id,
+        dataset_id=dataset_id,
+        name=payload.name.strip() if payload.name else source_dataset.name,
+        tile_url=source_dataset.tile_url,
+        opacity=payload.opacity,
+        visible=payload.visible,
+        position_x=payload.position.x,
+        position_y=payload.position.y,
+        width=payload.position.width,
+        rotation=payload.position.rotation,
+        metadata_=metadata,
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+
+    session.add(overlay)
+    session.commit()
+    session.refresh(overlay)
+
+    overlay_processing_status[overlay_id] = {
+        "status": "complete",
+        "progress": 100,
+        "message": "Overlay linked to existing dataset",
+    }
+
+    return OverlayResponse.from_db(overlay)
+
+
 @router.get("/status/{overlay_id}", response_model=dict)
 async def get_overlay_status(overlay_id: str):
     status = overlay_processing_status.get(overlay_id)
@@ -326,9 +435,11 @@ async def delete_overlay(overlay_id: str, session: Session = Depends(get_session
         raise HTTPException(status_code=404, detail="Overlay not found")
 
     tile_identifier = overlay.tile_url.split("/tiles/")[-1]
-    tile_dir = TILES_DIR / tile_identifier
-    if tile_dir.exists():
-        shutil.rmtree(tile_dir, ignore_errors=True)
+    metadata = _normalize_metadata(overlay.metadata_)
+    if metadata.get("sourceDatasetId") is None and tile_identifier.startswith("overlay-"):
+        tile_dir = TILES_DIR / tile_identifier
+        if tile_dir.exists():
+            shutil.rmtree(tile_dir, ignore_errors=True)
 
     session.delete(overlay)
     session.commit()
