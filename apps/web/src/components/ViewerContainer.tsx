@@ -9,6 +9,7 @@ import { CompareSwipe } from "./CompareSwipe";
 import { Annotator } from "./Annotator";
 import { ViewerToolbar } from "./ViewerToolbar";
 import { SearchBox } from "./SearchBox";
+import { ObjectDetector } from "./ObjectDetector";
 import { AnnotationsList } from "./AnnotationsList";
 import { TimeBar } from "./TimeBar";
 
@@ -92,8 +93,9 @@ export function ViewerContainer({ datasetId }: ViewerContainerProps) {
 
       {!kioskMode && (
         <>
-          <div className="absolute left-4 top-20 z-20">
+          <div className="absolute left-4 top-20 z-20 space-y-4">
             <SearchBox datasetId={datasetId} />
+            <ObjectDetector datasetId={datasetId} />
           </div>
 
           {mode === "annotate" && (

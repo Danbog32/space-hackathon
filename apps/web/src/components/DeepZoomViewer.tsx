@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import OpenSeadragon from "openseadragon";
 import { useViewerStore } from "@/store/viewerStore";
+
+// Dynamic import for OpenSeadragon to avoid SSR issues
+let OpenSeadragon: any = null;
+if (typeof window !== "undefined") {
+  OpenSeadragon = require("openseadragon");
+}
 
 interface DeepZoomViewerProps {
   tileSource: string;
@@ -10,11 +15,11 @@ interface DeepZoomViewerProps {
 
 export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
   const viewerRef = useRef<HTMLDivElement>(null);
-  const osdRef = useRef<OpenSeadragon.Viewer | null>(null);
+  const osdRef = useRef<any>(null);
   const selectedSearchResult = useViewerStore((state) => state.selectedSearchResult);
 
   useEffect(() => {
-    if (!viewerRef.current || osdRef.current) return;
+    if (!viewerRef.current || osdRef.current || !OpenSeadragon) return;
 
     osdRef.current = OpenSeadragon({
       element: viewerRef.current,

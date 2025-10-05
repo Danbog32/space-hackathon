@@ -121,6 +121,14 @@ async def update_annotation(
     if not annotation:
         raise HTTPException(status_code=404, detail="Annotation not found")
     
+    # Debug: Log received metadata
+    if request.metadata is not None:
+        print(f"🔍 Received metadata keys: {list(request.metadata.keys())}")
+        print(f"🔍 Has snippet_preview: {'snippet_preview' in request.metadata}")
+        if 'snippet_preview' in request.metadata:
+            preview_len = len(request.metadata['snippet_preview']) if request.metadata['snippet_preview'] else 0
+            print(f"🔍 Snippet preview length: {preview_len} characters")
+    
     # Update fields if provided
     if request.geometry is not None:
         annotation.geometry = json.dumps(request.geometry)
@@ -132,6 +140,7 @@ async def update_annotation(
         annotation.color = request.color
     if request.metadata is not None:
         annotation.metadata_ = request.metadata
+        print(f"✅ Metadata saved to database")
 
     annotation.updated_at = datetime.now()
     session.add(annotation)
