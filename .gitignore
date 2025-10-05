@@ -66,3 +66,5 @@ Thumbs.db
 # D
 infra/tiles/*
 infra/downloads/*
+
+pnpm-lock.yaml
