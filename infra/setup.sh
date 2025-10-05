@@ -1,3 +1,4 @@
+
 #!/bin/bash
 # Setup script for Astro-Zoom development environment
 
@@ -45,13 +46,17 @@ cd apps/ai
 pip install -r requirements.txt
 cd ../..
 
+# Install tiling dependencies
+pip install -r infra/requirements_tiling.txt
+
 echo "✓ Python dependencies installed"
 echo ""
 
-# Generate sample tiles
-echo "Generating sample tile data..."
-python3 infra/generate_sample_tiles.py
-echo "✓ Sample tiles generated"
+# Generate real datasets (Andromeda & Earth)
+echo "Ensuring default datasets (Andromeda & Earth)..."
+python3 infra/ensure_datasets.py
+
+echo "✓ Datasets ready"
 echo ""
 
 # Build packages

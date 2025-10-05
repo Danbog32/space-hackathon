@@ -33,9 +33,11 @@ Image.MAX_IMAGE_PIXELS = None
 
 
 # Configuration
-IMAGE_URL = "https://assets.science.nasa.gov/content/dam/science/missions/hubble/galaxies/andromeda/Hubble_M31Mosaic_2025_42208x9870_STScI-01JGY8MZB6RAYKZ1V4CHGN37Q6.jpg"
-TILES_DIR = Path(__file__).parent / "tiles" / "andromeda"
+DEFAULT_IMAGE_URL = "https://assets.science.nasa.gov/content/dam/science/missions/hubble/galaxies/andromeda/Hubble_M31Mosaic_2025_42208x9870_STScI-01JGY8MZB6RAYKZ1V4CHGN37Q6.jpg"
+DATASETS_ROOT = Path(__file__).parent / "tiles"
 DOWNLOAD_DIR = Path(__file__).parent / "downloads"
+DEFAULT_DATASET_ID = "andromeda"
+DEFAULT_FILENAME = "andromeda_hubble_2025.jpg"
 TILE_SIZE = 256
 TILE_OVERLAP = 1  # 1 pixel overlap for seamless rendering
 TILE_FORMAT = "jpg"
@@ -51,8 +53,7 @@ def download_image(url: str, output_path: Path, force: bool = False) -> Path:
         print(f"✓ Image already downloaded: {output_path}")
         return output_path
     
-    print(f"Downloading NASA Andromeda image ({url})...")
-    print("This may take several minutes (209MB)...")
+    print(f"Downloading image ({url})...")
     
     # Get file size
     response = requests.head(url, allow_redirects=True)
@@ -224,21 +225,40 @@ def generate_tiles_optimized(image_path: Path, output_dir: Path, tile_size: int 
 def main():
     """Main processing pipeline."""
     print("=" * 60)
-    print("NASA Andromeda Image Tile Generator")
+    print("NASA Deep Zoom Tile Generator")
     print("=" * 60)
     print()
     
+    # Resolve configuration from CLI args or env vars
+    # Usage: python process_real_image.py [DATASET_ID] [IMAGE_URL] [OUTPUT_FILENAME]
+    dataset_id = os.environ.get("DATASET_ID")
+    image_url = os.environ.get("IMAGE_URL")
+    output_filename = os.environ.get("OUTPUT_FILENAME")
+
+    args = sys.argv[1:]
+    if len(args) >= 1:
+        dataset_id = args[0]
+    if len(args) >= 2:
+        image_url = args[1]
+    if len(args) >= 3:
+        output_filename = args[2]
+
+    dataset_id = dataset_id or DEFAULT_DATASET_ID
+    image_url = image_url or DEFAULT_IMAGE_URL
+    output_filename = output_filename or DEFAULT_FILENAME
+
+    tiles_dir = DATASETS_ROOT / dataset_id
+
     # Step 1: Download image
     DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    image_filename = "andromeda_hubble_2025.jpg"
-    image_path = DOWNLOAD_DIR / image_filename
+    image_path = DOWNLOAD_DIR / output_filename
     
     try:
-        download_image(IMAGE_URL, image_path)
+        download_image(image_url, image_path)
     except Exception as e:
         print(f"Error downloading image: {e}")
         print("\nYou can manually download the image from:")
-        print(IMAGE_URL)
+        print(image_url)
         print(f"And place it at: {image_path}")
         sys.exit(1)
     
@@ -253,10 +273,10 @@ def main():
     
     # Step 3: Generate tiles
     print("\nGenerating optimized tile pyramid...")
-    print("This may take 10-30 minutes depending on your CPU...")
+    print("This may take minutes depending on image size and CPU...")
     
     try:
-        generate_tiles_optimized(image_path, TILES_DIR)
+        generate_tiles_optimized(image_path, tiles_dir)
     except Exception as e:
         print(f"Error generating tiles: {e}")
         import traceback
@@ -266,7 +286,7 @@ def main():
     print("\n" + "=" * 60)
     print("✓ COMPLETE!")
     print("=" * 60)
-    print(f"\nTiles are ready in: {TILES_DIR}")
+    print(f"\nTiles are ready in: {tiles_dir}")
     print("\nNext steps:")
     print("1. Start the API server: cd apps/api && make dev")
     print("2. Start the web app: cd apps/web && pnpm dev")

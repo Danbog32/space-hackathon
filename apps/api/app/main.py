@@ -21,8 +21,9 @@ from app.routers import (
     classify,
     detect
 )
-
 from app.seed import seed_database
+from app.middleware.security import SecurityHeadersMiddleware, RequestSanitizationMiddleware
+from app.middleware.audit import AuditLoggingMiddleware
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -51,7 +52,17 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS middleware
+# Security middlewares (order matters!)
+# 1. Request sanitization (first line of defense)
+app.add_middleware(RequestSanitizationMiddleware)
+
+# 2. Audit logging (log all write operations)
+app.add_middleware(AuditLoggingMiddleware)
+
+# 3. Security headers (add headers to responses)
+app.add_middleware(SecurityHeadersMiddleware)
+
+# 4. CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -89,4 +100,3 @@ async def root():
         "docs": "/docs",
         "health": "/health",
     }
-

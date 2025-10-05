@@ -51,7 +51,7 @@ def generate_tiles():
     
     tile = create_star_field_tile(256, 256, star_count=30)
     tile.save(level_0_dir / "0_0.jpg", "JPEG", quality=85)
-    print(f"✓ Created level 0: 1 tile")
+    print(f"Created level 0: 1 tile")
     
     # Level 1: 2x2 tiles
     level_1_dir = TILES_DIR / "1"
@@ -61,7 +61,7 @@ def generate_tiles():
         for row in range(2):
             tile = create_star_field_tile(256, 256, star_count=25)
             tile.save(level_1_dir / f"{col}_{row}.jpg", "JPEG", quality=85)
-    print(f"✓ Created level 1: 4 tiles")
+    print(f"Created level 1: 4 tiles")
     
     # Level 2: 4x4 tiles
     level_2_dir = TILES_DIR / "2"
@@ -76,7 +76,7 @@ def generate_tiles():
             
             tile = create_star_field_tile(256, 256, star_count=star_count)
             tile.save(level_2_dir / f"{col}_{row}.jpg", "JPEG", quality=85)
-    print(f"✓ Created level 2: 16 tiles")
+    print(f"Created level 2: 16 tiles")
     
     print(f"\nTotal: 21 tiles generated in {TILES_DIR}")
     print("DZI descriptor already exists at:", TILES_DIR / "info.dzi")

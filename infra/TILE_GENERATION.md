@@ -93,6 +93,26 @@ Save as: `infra/downloads/andromeda_hubble_2025.jpg`
 
 Then run the script again.
 
+## Example: Generate Earth (Suomi NPP) Deep Zoom Tiles
+
+Easiest way:
+
+```bash
+python process_earth_image.py
+```
+
+This will:
+- Resolve the direct image from the NASA page
+- Download to `infra/downloads/earth_suomi_original.jpg`
+- Generate tiles to `infra/tiles/earth/`
+
+If auto-resolution fails, you can still use the generic script with a direct image URL:
+```bash
+python process_real_image.py earth "<DIRECT_IMAGE_URL>" earth_suomi_original.jpg
+```
+
+Note: Very large Earth images may take several minutes to process.
+
 ## Performance Tips
 
 ### For Faster Processing
