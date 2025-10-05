@@ -18,7 +18,10 @@ from app.routers import (
     overlays,
     auth as auth_router,
     uploads,
+    classify,
+    detect
 )
+
 from app.seed import seed_database
 
 # Rate limiter
@@ -63,6 +66,8 @@ app.include_router(datasets.router, prefix="/datasets", tags=["datasets"])
 app.include_router(features.router, prefix="/features", tags=["features"])
 app.include_router(annotations.router, prefix="/annotations", tags=["annotations"])
 app.include_router(search.router, prefix="/search", tags=["search"])
+app.include_router(classify.router, prefix="/classify", tags=["classify"])
+app.include_router(detect.router, prefix="/detect", tags=["detect"])
 app.include_router(tiles.router, prefix="/tiles", tags=["tiles"])
 app.include_router(overlays.router, prefix="/overlays", tags=["overlays"])
 app.include_router(uploads.router, prefix="/uploads", tags=["uploads"])

@@ -32,6 +32,8 @@ interface ViewerState {
   setActiveOverlayId: (overlayId: string | null) => void;
   overlayMoveEnabled: boolean;
   setOverlayMoveEnabled: (enabled: boolean) => void;
+  showSnippets: boolean;
+  toggleShowSnippets: () => void;
 }
 
 export const useViewerStore = create<ViewerState>((set) => ({
@@ -80,4 +82,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   setActiveOverlayId: (overlayId) => set({ activeOverlayId: overlayId }),
   overlayMoveEnabled: false,
   setOverlayMoveEnabled: (enabled) => set({ overlayMoveEnabled: enabled }),
+
+  showSnippets: true,
+  toggleShowSnippets: () => set((state) => ({ showSnippets: !state.showSnippets })),
 }));

@@ -14,6 +14,8 @@ export function ViewerToolbar({ dataset }: ViewerToolbarProps) {
   const setMode = useViewerStore((state) => state.setMode);
   const kioskMode = useViewerStore((state) => state.kioskMode);
   const toggleKioskMode = useViewerStore((state) => state.toggleKioskMode);
+  const showSnippets = useViewerStore((state) => state.showSnippets);
+  const toggleShowSnippets = useViewerStore((state) => state.toggleShowSnippets);
 
   return (
     <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between bg-gray-900/90 p-4 backdrop-blur-sm">
@@ -59,6 +61,15 @@ export function ViewerToolbar({ dataset }: ViewerToolbarProps) {
         </Button>
 
         <div className="h-6 w-px bg-gray-700 mx-2" />
+
+        <Button 
+          variant={showSnippets ? "primary" : "ghost"} 
+          size="sm" 
+          onClick={toggleShowSnippets}
+          title="Toggle AI snippet previews in annotations"
+        >
+          {showSnippets ? "🖼️ Snippets" : "🖼️"}
+        </Button>
 
         <Button variant="ghost" size="sm" onClick={toggleKioskMode}>
           {kioskMode ? "Exit Kiosk" : "Kiosk"}

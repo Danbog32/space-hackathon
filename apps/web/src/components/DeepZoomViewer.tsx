@@ -3,8 +3,15 @@
 import { useEffect, useMemo, useRef } from "react";
 import OpenSeadragon from "openseadragon";
 import { api } from "@/lib/api";
+
 import { useViewerStore } from "@/store/viewerStore";
 import type { Overlay } from "@astro-zoom/proto";
+
+// Dynamic import for OpenSeadragon to avoid SSR issues
+let OpenSeadragon: any = null;
+if (typeof window !== "undefined") {
+  OpenSeadragon = require("openseadragon");
+}
 
 interface DeepZoomViewerProps {
   tileSource: string;
@@ -25,7 +32,7 @@ export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
   const overlayMoveEnabled = useViewerStore((state) => state.overlayMoveEnabled);
 
   useEffect(() => {
-    if (!viewerRef.current || osdRef.current) return;
+    if (!viewerRef.current || osdRef.current || !OpenSeadragon) return;
 
     osdRef.current = OpenSeadragon({
       element: viewerRef.current,
