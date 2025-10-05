@@ -12,7 +12,6 @@ import { SearchBox } from "./SearchBox";
 import { ObjectDetector } from "./ObjectDetector";
 import { AnnotationsList } from "./AnnotationsList";
 import { TimeBar } from "./TimeBar";
-import { OverlayManager } from "./OverlayManager";
 
 interface ViewerContainerProps {
   datasetId: string;
@@ -22,7 +21,6 @@ export function ViewerContainer({ datasetId }: ViewerContainerProps) {
   const mode = useViewerStore((state) => state.mode);
   const kioskMode = useViewerStore((state) => state.kioskMode);
   const setAnnotations = useViewerStore((state) => state.setAnnotations);
-  const setOverlays = useViewerStore((state) => state.setOverlays);
 
   const {
     data: dataset,
@@ -38,22 +36,11 @@ export function ViewerContainer({ datasetId }: ViewerContainerProps) {
     queryFn: () => api.getAnnotations(datasetId),
   });
 
-  const { data: overlays } = useQuery({
-    queryKey: ["overlays", datasetId],
-    queryFn: () => api.getOverlays(datasetId),
-  });
-
   useEffect(() => {
     if (annotations) {
       setAnnotations(annotations);
     }
   }, [annotations, setAnnotations]);
-
-  useEffect(() => {
-    if (overlays) {
-      setOverlays(overlays);
-    }
-  }, [overlays, setOverlays]);
 
   if (isLoading) {
     return (
@@ -116,10 +103,6 @@ export function ViewerContainer({ datasetId }: ViewerContainerProps) {
               <AnnotationsList datasetId={datasetId} />
             </div>
           )}
-
-          <div className="absolute right-4 bottom-8 z-20 w-80 max-w-full">
-            <OverlayManager datasetId={datasetId} />
-          </div>
         </>
       )}
     </div>

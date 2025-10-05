@@ -33,30 +33,6 @@ export const DatasetSchema = z.object({
 
 export const DatasetListSchema = z.array(DatasetSchema);
 
-// Overlay schemas
-export const OverlayPositionSchema = z.object({
-  x: z.number(),
-  y: z.number(),
-  width: z.number().positive(),
-  rotation: z.number().default(0),
-});
-
-export const OverlaySchema = z.object({
-  id: z.string(),
-  datasetId: z.string(),
-  sourceDatasetId: z.string().optional(),
-  name: z.string(),
-  tileUrl: z.string(),
-  opacity: z.number().min(0).max(1),
-  visible: z.boolean(),
-  position: OverlayPositionSchema,
-  metadata: z.record(z.any()).optional(),
-  createdAt: z.string().datetime().optional(),
-  updatedAt: z.string().datetime().optional(),
-});
-
-export const OverlayListSchema = z.array(OverlaySchema);
-
 // Feature schemas
 export const FeatureSchema = z.object({
   id: z.string(),
@@ -120,14 +96,6 @@ export const SearchResponseSchema = z.object({
   total: z.number(),
 });
 
-export const OverlayStatusSchema = z.object({
-  overlayId: z.string(),
-  status: z.enum(["queued", "processing", "complete", "error"]),
-  progress: z.number().min(0).max(100),
-  message: z.string(),
-  result: z.record(z.any()).optional(),
-});
-
 // Auth schemas
 export const LoginSchema = z.object({
   username: z.string(),
@@ -152,9 +120,6 @@ export type Point = z.infer<typeof PointSchema>;
 export type Polygon = z.infer<typeof PolygonSchema>;
 export type Dataset = z.infer<typeof DatasetSchema>;
 export type DatasetList = z.infer<typeof DatasetListSchema>;
-export type OverlayPosition = z.infer<typeof OverlayPositionSchema>;
-export type Overlay = z.infer<typeof OverlaySchema>;
-export type OverlayList = z.infer<typeof OverlayListSchema>;
 export type Feature = z.infer<typeof FeatureSchema>;
 export type FeatureList = z.infer<typeof FeatureListSchema>;
 export type Annotation = z.infer<typeof AnnotationSchema>;
@@ -163,7 +128,6 @@ export type UpdateAnnotation = z.infer<typeof UpdateAnnotationSchema>;
 export type AnnotationList = z.infer<typeof AnnotationListSchema>;
 export type SearchResult = z.infer<typeof SearchResultSchema>;
 export type SearchResponse = z.infer<typeof SearchResponseSchema>;
-export type OverlayStatus = z.infer<typeof OverlayStatusSchema>;
 export type Login = z.infer<typeof LoginSchema>;
 export type Token = z.infer<typeof TokenSchema>;
 export type Health = z.infer<typeof HealthSchema>;

@@ -2,8 +2,6 @@
 
 from datetime import datetime
 from typing import Optional, Dict, Any
-from uuid import uuid4
-
 from sqlmodel import SQLModel, Field, Column, JSON
 
 
@@ -48,27 +46,6 @@ class Annotation(SQLModel, table=True):
     label: Optional[str] = None
     description: Optional[str] = None
     color: Optional[str] = "#ff0000"
-    metadata_: Optional[Dict[str, Any]] = Field(
-        default=None,
-        sa_column=Column("metadata", JSON),
-    )
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
-
-
-class Overlay(SQLModel, table=True):
-    """Overlay model representing secondary tiled images placed on datasets."""
-
-    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
-    dataset_id: str = Field(foreign_key="dataset.id")
-    name: str
-    tile_url: str
-    opacity: float = Field(default=1.0)
-    visible: bool = Field(default=True)
-    position_x: float = Field(default=0.0)
-    position_y: float = Field(default=0.0)
-    width: float = Field(default=1.0)
-    rotation: float = Field(default=0.0)
     metadata_: Optional[Dict[str, Any]] = Field(
         default=None,
         sa_column=Column("metadata", JSON),
