@@ -1,17 +1,39 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import OpenSeadragon from "openseadragon";
 import { api } from "@/lib/api";
 
 import { useViewerStore } from "@/store/viewerStore";
 import type { Overlay } from "@astro-zoom/proto";
+type OpenSeadragonModule = typeof import("openseadragon");
+type Viewer = InstanceType<OpenSeadragonModule["Viewer"]>;
+type TiledImage = InstanceType<OpenSeadragonModule["TiledImage"]>;
+type Point = InstanceType<OpenSeadragonModule["Point"]>;
 
-// Dynamic import for OpenSeadragon to avoid SSR issues
-let OpenSeadragon: any = null;
-if (typeof window !== "undefined") {
-  OpenSeadragon = require("openseadragon");
-}
+type HandlerAugmentation = {
+  preventDefaultAction?: boolean;
+  stopHandlers?: boolean;
+};
+
+type CanvasPressEvent = import("openseadragon").CanvasPressEvent & HandlerAugmentation;
+type CanvasDragEvent = import("openseadragon").CanvasDragEvent & HandlerAugmentation;
+type CanvasReleaseEvent = import("openseadragon").CanvasReleaseEvent & HandlerAugmentation;
+
+
+let cachedOpenSeadragon: OpenSeadragonModule | null = null;
+
+const getOpenSeadragon = (): OpenSeadragonModule | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  if (!cachedOpenSeadragon) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    cachedOpenSeadragon = require("openseadragon") as OpenSeadragonModule;
+  }
+
+  return cachedOpenSeadragon;
+};
 
 interface DeepZoomViewerProps {
   tileSource: string;
@@ -19,11 +41,11 @@ interface DeepZoomViewerProps {
 
 export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
   const viewerRef = useRef<HTMLDivElement>(null);
-  const osdRef = useRef<OpenSeadragon.Viewer | null>(null);
-  const overlayItemsRef = useRef<Map<string, OpenSeadragon.TiledImage>>(new Map());
+  const osdRef = useRef<Viewer | null>(null);
+  const overlayItemsRef = useRef<Map<string, TiledImage>>(new Map());
   const overlaysRef = useRef<Overlay[]>([]);
   const lastDraggedOverlayRef = useRef<Overlay | null>(null);
-  const dragOffsetRef = useRef<OpenSeadragon.Point | null>(null);
+  const dragOffsetRef = useRef<Point | null>(null);
   const isDraggingOverlayRef = useRef(false);
   const selectedSearchResult = useViewerStore((state) => state.selectedSearchResult);
   const overlays = useViewerStore((state) => state.overlays);
@@ -32,14 +54,15 @@ export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
   const overlayMoveEnabled = useViewerStore((state) => state.overlayMoveEnabled);
 
   useEffect(() => {
-    if (!viewerRef.current || osdRef.current || !OpenSeadragon) return;
+    const osd = getOpenSeadragon();
+    if (!viewerRef.current || osdRef.current || !osd) return;
 
-    osdRef.current = OpenSeadragon({
+    osdRef.current = osd({
       element: viewerRef.current,
       prefixUrl: "//openseadragon.github.io/openseadragon/images/",
       tileSources: tileSource,
       showNavigationControl: true,
-      navigationControlAnchor: OpenSeadragon.ControlAnchor.BOTTOM_RIGHT,
+      navigationControlAnchor: osd.ControlAnchor.BOTTOM_RIGHT,
       animationTime: 0.5,
       blendTime: 0.1,
       constrainDuringPan: true,
@@ -85,12 +108,12 @@ export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
 
   useEffect(() => {
     const viewer = osdRef.current;
-    if (!viewer) return;
+    const osd = getOpenSeadragon();
+    if (!viewer || !osd) return;
 
     const overlayItems = overlayItemsRef.current;
     const knownIds = new Set(overlays.map((overlay) => overlay.id));
 
-    // Remove overlays that no longer exist
     overlayItems.forEach((item, overlayId) => {
       if (!knownIds.has(overlayId)) {
         viewer.world.removeItem(item);
@@ -101,14 +124,14 @@ export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
     overlays.forEach((overlay) => {
       const target = overlayItems.get(overlay.id);
       const tileSourceUrl = `${apiBase}${overlay.tileUrl}/info.dzi`;
-
       if (!target) {
         viewer.addTiledImage({
           tileSource: tileSourceUrl,
           x: overlay.position.x,
           y: overlay.position.y,
           width: overlay.position.width,
-          success: ({ item }) => {
+          success: (event: Event) => {
+            const { item } = event as unknown as { item: TiledImage };
             overlayItems.set(overlay.id, item);
             item.setOpacity(overlay.visible ? overlay.opacity : 0);
             if (typeof item.setRotation === "function") {
@@ -122,7 +145,7 @@ export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
       } else {
         target.setOpacity(overlay.visible ? overlay.opacity : 0);
         target.setWidth(overlay.position.width);
-        target.setPosition(new OpenSeadragon.Point(overlay.position.x, overlay.position.y));
+        target.setPosition(new osd.Point(overlay.position.x, overlay.position.y));
         if (typeof target.setRotation === "function") {
           target.setRotation(overlay.position.rotation ?? 0);
         }
@@ -132,11 +155,12 @@ export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
 
   useEffect(() => {
     const viewer = osdRef.current;
-    if (!viewer) return;
+    const osd = getOpenSeadragon();
+    if (!viewer || !osd) return;
 
     const overlayItems = overlayItemsRef.current;
 
-    const handlePress = (event: OpenSeadragon.ViewerEvent<any>) => {
+    const handlePress = (event: CanvasPressEvent) => {
       if (!overlayMoveEnabled || !activeOverlayId) return;
       const targetOverlay = overlaysRef.current.find((overlay) => overlay.id === activeOverlayId);
       const overlayItem = targetOverlay ? overlayItems.get(targetOverlay.id) : null;
@@ -153,13 +177,13 @@ export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
         return;
       }
 
-      dragOffsetRef.current = new OpenSeadragon.Point(pointer.x - bounds.x, pointer.y - bounds.y);
+      dragOffsetRef.current = new osd.Point(pointer.x - bounds.x, pointer.y - bounds.y);
       isDraggingOverlayRef.current = true;
       event.preventDefaultAction = true;
       event.stopHandlers = true;
     };
 
-    const handleDrag = (event: OpenSeadragon.ViewerEvent<any>) => {
+    const handleDrag = (event: CanvasDragEvent) => {
       if (!overlayMoveEnabled || !isDraggingOverlayRef.current || !activeOverlayId) {
         return;
       }
@@ -175,7 +199,7 @@ export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
       const nextX = pointer.x - offset.x;
       const nextY = pointer.y - offset.y;
 
-      overlayItem.setPosition(new OpenSeadragon.Point(nextX, nextY));
+      overlayItem.setPosition(new osd.Point(nextX, nextY));
 
       const updatedOverlay: Overlay = {
         ...overlay,
@@ -222,7 +246,7 @@ export function DeepZoomViewer({ tileSource }: DeepZoomViewerProps) {
       }
     };
 
-    const handleRelease = (event: OpenSeadragon.ViewerEvent<any>) => {
+    const handleRelease = (event: CanvasReleaseEvent) => {
       if (isDraggingOverlayRef.current) {
         event.preventDefaultAction = true;
         event.stopHandlers = true;

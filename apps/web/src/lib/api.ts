@@ -92,9 +92,11 @@ export const api = {
         } else {
           try {
             const error = JSON.parse(xhr.responseText);
+            console.error("Overlay upload error:", xhr.status, error);
             reject(new Error(error.detail || "Overlay upload failed"));
           } catch (error) {
-            reject(new Error(`Overlay upload failed with status ${xhr.status}`));
+            console.error("Overlay upload failed:", xhr.status, xhr.responseText);
+            reject(new Error(`Overlay upload failed with status ${xhr.status}: ${xhr.responseText || 'Unknown error'}`));
           }
         }
       });
@@ -169,11 +171,13 @@ export const api = {
       let message = "Failed to link overlay dataset";
       try {
         const error = await res.json();
+        console.error("Overlay from dataset error:", res.status, error);
         if (error?.detail) {
           message = error.detail;
         }
-      } catch {
-        // Ignore JSON parsing errors
+      } catch (e) {
+        console.error("Failed to parse error response:", res.status, e);
+        message = `Failed to link overlay dataset (HTTP ${res.status})`;
       }
       throw new Error(message);
     }

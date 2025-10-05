@@ -255,8 +255,18 @@ async def list_overlays(
     return [OverlayResponse.from_db(overlay) for overlay in overlays]
 
 
+@router.get("/status/{overlay_id}", response_model=dict)
+async def get_overlay_status(overlay_id: str):
+    """Get overlay processing status."""
+    status = overlay_processing_status.get(overlay_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Overlay status not found")
+    return {"overlayId": overlay_id, **status}
+
+
 @router.get("/{overlay_id}", response_model=dict)
 async def get_overlay(overlay_id: str, session: Session = Depends(get_session)):
+    """Get overlay by ID."""
     overlay = session.get(Overlay, overlay_id)
     if not overlay:
         raise HTTPException(status_code=404, detail="Overlay not found")
@@ -383,14 +393,6 @@ async def create_overlay_from_dataset(
     }
 
     return OverlayResponse.from_db(overlay)
-
-
-@router.get("/status/{overlay_id}", response_model=dict)
-async def get_overlay_status(overlay_id: str):
-    status = overlay_processing_status.get(overlay_id)
-    if not status:
-        raise HTTPException(status_code=404, detail="Overlay status not found")
-    return {"overlayId": overlay_id, **status}
 
 
 @router.patch("/{overlay_id}", response_model=dict)
