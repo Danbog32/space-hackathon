@@ -18,12 +18,13 @@ interface AnnotatorProps {
 }
 
 type AnnotationType = "point" | "rect" | "polygon";
+type InteractionMode = "navigate" | AnnotationType;
 
 export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
   const viewerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const osdRef = useRef<any>(null);
-  const [annotationType, setAnnotationType] = useState<AnnotationType>("rect");
+  const [interactionMode, setInteractionMode] = useState<InteractionMode>("navigate");
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [classification, setClassification] = useState<any>(null);
@@ -182,9 +183,20 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
     };
   }, [annotations]);
 
+  useEffect(() => {
+    if (interactionMode !== "rect") {
+      setIsDrawing(false);
+      setStartPoint(null);
+    }
+  }, [interactionMode]);
+
   const handleAnnotationClick = useCallback(
     async (imagePoint: { x: number; y: number }) => {
-      if (annotationType === "point") {
+      if (interactionMode === "navigate") {
+        return;
+      }
+
+      if (interactionMode === "point") {
         const annotationData: CreateAnnotation = {
           datasetId,
           type: "point",
@@ -199,7 +211,7 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
         } catch (error) {
           console.error("Failed to create annotation:", error);
         }
-      } else if (annotationType === "rect") {
+      } else if (interactionMode === "rect") {
         if (!isDrawing) {
           setIsDrawing(true);
           setStartPoint({ x: imagePoint.x, y: imagePoint.y });
@@ -240,14 +252,7 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
         }
       }
     },
-    [
-      addAnnotation,
-      annotationType,
-      classifyMutation,
-      datasetId,
-      isDrawing,
-      startPoint,
-    ]
+    [addAnnotation, interactionMode, classifyMutation, datasetId, isDrawing, startPoint]
   );
 
   useEffect(() => {
@@ -276,23 +281,60 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
     };
   }, [handleAnnotationClick]);
 
+  useEffect(() => {
+    const viewer = osdRef.current;
+    if (!viewer) return;
+
+    const isNavigating = interactionMode === "navigate";
+
+    if (typeof viewer.setMouseNavEnabled === "function") {
+      viewer.setMouseNavEnabled(true);
+    }
+
+    if (viewer.gestureSettingsMouse) {
+      viewer.gestureSettingsMouse.clickToZoom = isNavigating;
+      viewer.gestureSettingsMouse.dblClickToZoom = isNavigating;
+      viewer.gestureSettingsMouse.dragToPan = isNavigating;
+      viewer.gestureSettingsMouse.scrollToZoom = isNavigating;
+    }
+
+    if (viewer.gestureSettingsTouch) {
+      viewer.gestureSettingsTouch.pinchToZoom = isNavigating;
+      viewer.gestureSettingsTouch.dragToPan = isNavigating;
+    }
+  }, [interactionMode]);
+
   return (
     <div className="relative h-full w-full">
       <div
         ref={viewerRef}
-        className="h-full w-full openseadragon-container cursor-crosshair"
+        className={`h-full w-full openseadragon-container ${
+          interactionMode === "navigate" ? "cursor-grab" : "cursor-crosshair"
+        }`}
       />
       <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex gap-2 bg-gray-900/90 p-2 rounded-lg backdrop-blur-sm">
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 bg-gray-900/90 p-2 rounded-lg backdrop-blur-sm">
         <button
-          onClick={() => setAnnotationType("point")}
-          className={`px-4 py-2 rounded ${annotationType === "point" ? "bg-blue-600" : "bg-gray-700"}`}
+          onClick={() => setInteractionMode("navigate")}
+          className={`px-4 py-2 rounded ${
+            interactionMode === "navigate" ? "bg-blue-600" : "bg-gray-700"
+          }`}
+        >
+          Pan / Zoom
+        </button>
+        <button
+          onClick={() => setInteractionMode("point")}
+          className={`px-4 py-2 rounded ${
+            interactionMode === "point" ? "bg-blue-600" : "bg-gray-700"
+          }`}
         >
           Point
         </button>
         <button
-          onClick={() => setAnnotationType("rect")}
-          className={`px-4 py-2 rounded ${annotationType === "rect" ? "bg-blue-600" : "bg-gray-700"}`}
+          onClick={() => setInteractionMode("rect")}
+          className={`px-4 py-2 rounded ${
+            interactionMode === "rect" ? "bg-blue-600" : "bg-gray-700"
+          }`}
         >
           Rectangle + AI Classify
         </button>
@@ -300,7 +342,7 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
 
       {/* Classification result popup */}
       {showClassification && classification && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-900/95 p-4 rounded-lg backdrop-blur-sm border border-green-500/50 max-w-md">
+        <div className="absolute bottom-4 left-2 bg-gray-900/95 p-4 rounded-lg backdrop-blur-sm border border-green-500/50 max-w-md">
           <div className="flex items-start justify-between mb-3">
             <h4 className="text-sm font-semibold text-green-400">🔬 AI Classification</h4>
             <button
