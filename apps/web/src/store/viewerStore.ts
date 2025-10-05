@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Annotation, SearchResult } from "@astro-zoom/proto";
+import type { Annotation, Overlay, SearchResult } from "@astro-zoom/proto";
 
 type ViewMode = "explore" | "compare" | "annotate" | "time";
 
@@ -23,6 +23,13 @@ interface ViewerState {
 
   gridVisible: boolean;
   toggleGrid: () => void;
+
+  overlays: Overlay[];
+  setOverlays: (overlays: Overlay[]) => void;
+  upsertOverlay: (overlay: Overlay) => void;
+  removeOverlay: (overlayId: string) => void;
+  activeOverlayId: string | null;
+  setActiveOverlayId: (overlayId: string | null) => void;
 }
 
 export const useViewerStore = create<ViewerState>((set) => ({
@@ -52,4 +59,21 @@ export const useViewerStore = create<ViewerState>((set) => ({
 
   gridVisible: false,
   toggleGrid: () => set((state) => ({ gridVisible: !state.gridVisible })),
+
+  overlays: [],
+  setOverlays: (overlays) => set({ overlays }),
+  upsertOverlay: (overlay) =>
+    set((state) => {
+      const existingIndex = state.overlays.findIndex((item) => item.id === overlay.id);
+      if (existingIndex === -1) {
+        return { overlays: [...state.overlays, overlay] };
+      }
+      const updated = [...state.overlays];
+      updated.splice(existingIndex, 1, overlay);
+      return { overlays: updated };
+    }),
+  removeOverlay: (overlayId) =>
+    set((state) => ({ overlays: state.overlays.filter((overlay) => overlay.id !== overlayId) })),
+  activeOverlayId: null,
+  setActiveOverlayId: (overlayId) => set({ activeOverlayId: overlayId }),
 }));
