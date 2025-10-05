@@ -30,6 +30,8 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
   const [classification, setClassification] = useState<any>(null);
   const [showClassification, setShowClassification] = useState(false);
   const [currentAnnotationId, setCurrentAnnotationId] = useState<string | null>(null);
+  const [showAxes, setShowAxes] = useState(true);
+  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const annotations = useViewerStore((state) => state.annotations);
   const addAnnotation = useViewerStore((state) => state.addAnnotation);
   const updateAnnotation = useViewerStore((state) => state.updateAnnotation);
@@ -105,11 +107,27 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
       navigationControlAnchor: OpenSeadragon.ControlAnchor.BOTTOM_RIGHT,
     });
 
+    const viewer = osdRef.current;
+    const handleOpen = () => {
+      const item = viewer.world.getItemAt(0);
+      if (!item) return;
+      const { x: width, y: height } = item.getContentSize();
+      setImageDimensions({ width, height });
+    };
+
+    viewer.addHandler("open", handleOpen);
+
+    if (viewer.world.getItemCount() > 0) {
+      handleOpen();
+    }
+
     return () => {
-      if (osdRef.current) {
-        osdRef.current.destroy();
-        osdRef.current = null;
+      if (viewer) {
+        viewer.removeHandler("open", handleOpen);
+        viewer.destroy();
       }
+      osdRef.current = null;
+      setImageDimensions(null);
     };
   }, [tileSource]);
 
@@ -131,9 +149,18 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
     resize();
     window.addEventListener("resize", resize);
 
-    // Draw annotations
+    let animationFrameId = 0;
+
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (!imageDimensions) {
+        const item = viewer.world.getItemAt(0);
+        if (item) {
+          const { x: width, y: height } = item.getContentSize();
+          setImageDimensions({ width, height });
+        }
+      }
 
       annotations.forEach((annotation) => {
         const geom = annotation.geometry as any;
@@ -173,15 +200,73 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
         }
       });
 
-      requestAnimationFrame(draw);
+      if (showAxes && imageDimensions) {
+        const { width, height } = imageDimensions;
+        const centerX = width / 2;
+        const centerY = height / 2;
+
+        const leftViewportPoint = viewer.viewport.imageToViewportCoordinates(0, centerY);
+        const rightViewportPoint = viewer.viewport.imageToViewportCoordinates(width, centerY);
+        const topViewportPoint = viewer.viewport.imageToViewportCoordinates(centerX, 0);
+        const bottomViewportPoint = viewer.viewport.imageToViewportCoordinates(centerX, height);
+        const centerViewportPoint = viewer.viewport.imageToViewportCoordinates(centerX, centerY);
+
+        const leftPixel = viewer.viewport.viewportToViewerElementCoordinates(leftViewportPoint);
+        const rightPixel = viewer.viewport.viewportToViewerElementCoordinates(rightViewportPoint);
+        const topPixel = viewer.viewport.viewportToViewerElementCoordinates(topViewportPoint);
+        const bottomPixel = viewer.viewport.viewportToViewerElementCoordinates(bottomViewportPoint);
+        const centerPixel = viewer.viewport.viewportToViewerElementCoordinates(centerViewportPoint);
+
+        ctx.save();
+        ctx.strokeStyle = "rgba(59, 130, 246, 0.7)";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([6, 6]);
+
+        ctx.beginPath();
+        ctx.moveTo(leftPixel.x, leftPixel.y);
+        ctx.lineTo(rightPixel.x, rightPixel.y);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(topPixel.x, topPixel.y);
+        ctx.lineTo(bottomPixel.x, bottomPixel.y);
+        ctx.stroke();
+
+        ctx.setLineDash([]);
+        ctx.fillStyle = "rgba(37, 99, 235, 0.8)";
+        ctx.beginPath();
+        ctx.arc(centerPixel.x, centerPixel.y, 5, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(59, 130, 246, 0.35)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(centerPixel.x, centerPixel.y, 9, 0, 2 * Math.PI);
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(148, 163, 184, 0.9)";
+        ctx.font = "11px sans-serif";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "bottom";
+        ctx.fillText("X", rightPixel.x - 12, rightPixel.y - 6);
+        ctx.textAlign = "right";
+        ctx.textBaseline = "top";
+        ctx.fillText("Y", topPixel.x + 12, topPixel.y + 6);
+        ctx.restore();
+      }
+
+      animationFrameId = window.requestAnimationFrame(draw);
     };
 
     draw();
 
     return () => {
       window.removeEventListener("resize", resize);
+      if (animationFrameId) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
     };
-  }, [annotations]);
+  }, [annotations, imageDimensions, showAxes]);
 
   useEffect(() => {
     if (interactionMode !== "rect") {
@@ -313,7 +398,7 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
         }`}
       />
       <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 bg-gray-900/90 p-2 rounded-lg backdrop-blur-sm">
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-gray-900/90 p-2 rounded-lg backdrop-blur-sm shadow-lg">
         <button
           onClick={() => setInteractionMode("navigate")}
           className={`px-4 py-2 rounded ${
@@ -337,6 +422,17 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
           }`}
         >
           Rectangle + AI Classify
+        </button>
+        <div className="h-6 w-px bg-gray-800" />
+        <button
+          onClick={() => setShowAxes((prev) => !prev)}
+          className={`px-4 py-2 rounded transition-colors ${
+            showAxes ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-200"
+          }`}
+          aria-pressed={showAxes}
+          title={showAxes ? "Hide center axes" : "Show center axes"}
+        >
+          {showAxes ? "Axes On" : "Axes Off"}
         </button>
       </div>
 
