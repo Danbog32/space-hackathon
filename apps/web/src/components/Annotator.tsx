@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useViewerStore } from "@/store/viewerStore";
 
 // Dynamic import for OpenSeadragon to avoid SSR issues
@@ -182,41 +182,28 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
     };
   }, [annotations]);
 
-  const handleCanvasClick = async (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!osdRef.current || !canvasRef.current) return;
+  const handleAnnotationClick = useCallback(
+    async (imagePoint: { x: number; y: number }) => {
+      if (annotationType === "point") {
+        const annotationData: CreateAnnotation = {
+          datasetId,
+          type: "point",
+          geometry: { x: imagePoint.x, y: imagePoint.y },
+          label: "Point",
+          color: "#00ff00",
+        };
 
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const viewer = osdRef.current;
-    const viewportPoint = viewer.viewport.viewerElementToViewportCoordinates(
-      new OpenSeadragon.Point(x, y)
-    );
-    const imagePoint = viewer.viewport.viewportToImageCoordinates(viewportPoint);
-
-    if (annotationType === "point") {
-      const annotationData: CreateAnnotation = {
-        datasetId,
-        type: "point",
-        geometry: { x: imagePoint.x, y: imagePoint.y },
-        label: "Point",
-        color: "#00ff00",
-      };
-
-      try {
-        const created = await api.createAnnotation(annotationData);
-        addAnnotation(created);
-      } catch (error) {
-        console.error("Failed to create annotation:", error);
-      }
-    } else if (annotationType === "rect") {
-      if (!isDrawing) {
-        setIsDrawing(true);
-        setStartPoint({ x: imagePoint.x, y: imagePoint.y });
-      } else {
-        if (startPoint) {
+        try {
+          const created = await api.createAnnotation(annotationData);
+          addAnnotation(created);
+        } catch (error) {
+          console.error("Failed to create annotation:", error);
+        }
+      } else if (annotationType === "rect") {
+        if (!isDrawing) {
+          setIsDrawing(true);
+          setStartPoint({ x: imagePoint.x, y: imagePoint.y });
+        } else if (startPoint) {
           const width = Math.abs(imagePoint.x - startPoint.x);
           const height = Math.abs(imagePoint.y - startPoint.y);
           const x = Math.min(imagePoint.x, startPoint.x);
@@ -252,17 +239,50 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
           setStartPoint(null);
         }
       }
-    }
-  };
+    },
+    [
+      addAnnotation,
+      annotationType,
+      classifyMutation,
+      datasetId,
+      isDrawing,
+      startPoint,
+    ]
+  );
+
+  useEffect(() => {
+    if (!osdRef.current || !handleAnnotationClick) return;
+
+    const viewer = osdRef.current;
+
+    const handleCanvasClick = (event: any) => {
+      if (!event?.position) return;
+
+      const button = event.originalEvent?.button;
+      if (typeof button === "number" && button !== 0) {
+        return;
+      }
+
+      const viewportPoint = viewer.viewport.pointFromPixel(event.position);
+      const imagePoint = viewer.viewport.viewportToImageCoordinates(viewportPoint);
+
+      handleAnnotationClick(imagePoint);
+    };
+
+    viewer.addHandler("canvas-click", handleCanvasClick);
+
+    return () => {
+      viewer.removeHandler("canvas-click", handleCanvasClick);
+    };
+  }, [handleAnnotationClick]);
 
   return (
     <div className="relative h-full w-full">
-      <div ref={viewerRef} className="h-full w-full openseadragon-container" />
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 pointer-events-auto cursor-crosshair"
-        onClick={handleCanvasClick}
+      <div
+        ref={viewerRef}
+        className="h-full w-full openseadragon-container cursor-crosshair"
       />
+      <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />
       <div className="absolute top-4 left-1/2 -translate-x-1/2 flex gap-2 bg-gray-900/90 p-2 rounded-lg backdrop-blur-sm">
         <button
           onClick={() => setAnnotationType("point")}
