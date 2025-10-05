@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import OpenSeadragon from "openseadragon";
+
+// Dynamic import for OpenSeadragon to avoid SSR issues
+let OpenSeadragon: any = null;
+if (typeof window !== "undefined") {
+  OpenSeadragon = require("openseadragon");
+}
 
 interface CompareSwipeProps {
   tileSource: string;
@@ -12,13 +17,13 @@ export function CompareSwipe({ tileSource, tileSourceB }: CompareSwipeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerARef = useRef<HTMLDivElement>(null);
   const viewerBRef = useRef<HTMLDivElement>(null);
-  const osdARef = useRef<OpenSeadragon.Viewer | null>(null);
-  const osdBRef = useRef<OpenSeadragon.Viewer | null>(null);
+  const osdARef = useRef<any>(null);
+  const osdBRef = useRef<any>(null);
   const [dividerPosition, setDividerPosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
-    if (!viewerARef.current || !viewerBRef.current) return;
+    if (!viewerARef.current || !viewerBRef.current || !OpenSeadragon) return;
 
     // Create both viewers
     osdARef.current = OpenSeadragon({

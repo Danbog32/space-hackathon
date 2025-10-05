@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import OpenSeadragon from "openseadragon";
 import { useViewerStore } from "@/store/viewerStore";
+
+// Dynamic import for OpenSeadragon to avoid SSR issues
+let OpenSeadragon: any = null;
+if (typeof window !== "undefined") {
+  OpenSeadragon = require("openseadragon");
+}
 import { api } from "@/lib/api";
 import type { CreateAnnotation } from "@astro-zoom/proto";
 import { useMutation } from "@tanstack/react-query";
@@ -17,7 +22,7 @@ type AnnotationType = "point" | "rect" | "polygon";
 export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
   const viewerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const osdRef = useRef<OpenSeadragon.Viewer | null>(null);
+  const osdRef = useRef<any>(null);
   const [annotationType, setAnnotationType] = useState<AnnotationType>("rect");
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
@@ -30,25 +35,24 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
 
   // Classification mutation
   const classifyMutation = useMutation({
-    mutationFn: (bbox: [number, number, number, number]) => 
-      api.classifyRegion(datasetId, bbox),
+    mutationFn: (bbox: [number, number, number, number]) => api.classifyRegion(datasetId, bbox),
     onSuccess: async (data) => {
-      console.log('🎉 Raw classification response:', data);
-      console.log('🎉 All keys in response:', Object.keys(data));
-      
+      console.log("🎉 Raw classification response:", data);
+      console.log("🎉 All keys in response:", Object.keys(data));
+
       setClassification(data);
       setShowClassification(true);
-      
+
       // Update the annotation label with the classification result
       if (currentAnnotationId && data.primary_classification) {
         try {
           // Debug: Log what we're sending
-          console.log('🔍 Classification data received:', {
+          console.log("🔍 Classification data received:", {
             has_snippet_preview: !!data.snippet_preview,
             snippet_preview_length: data.snippet_preview?.length || 0,
             snippet_size: data.snippet_size,
             confidence: data.confidence,
-            model: data.model
+            model: data.model,
           });
 
           const metadata = {
@@ -58,20 +62,24 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
             model: data.model,
           };
 
-          console.log('📤 Sending update with metadata:', {
+          console.log("📤 Sending update with metadata:", {
             ...metadata,
-            snippet_preview: metadata.snippet_preview ? `[${metadata.snippet_preview.substring(0, 50)}...]` : 'MISSING'
+            snippet_preview: metadata.snippet_preview
+              ? `[${metadata.snippet_preview.substring(0, 50)}...]`
+              : "MISSING",
           });
 
           const updatedAnnotation = await api.updateAnnotation(currentAnnotationId, {
             label: data.primary_classification,
             description: `AI Classified: ${(data.confidence * 100).toFixed(1)}% confidence`,
-            metadata
+            metadata,
           });
 
-          console.log('✅ Update response:', {
+          console.log("✅ Update response:", {
             has_metadata: !!updatedAnnotation.metadata,
-            metadata_keys: updatedAnnotation.metadata ? Object.keys(updatedAnnotation.metadata) : []
+            metadata_keys: updatedAnnotation.metadata
+              ? Object.keys(updatedAnnotation.metadata)
+              : [],
           });
 
           updateAnnotation(currentAnnotationId, updatedAnnotation);
@@ -79,14 +87,14 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
           console.error("Failed to update annotation label:", error);
         }
       }
-      
+
       // Auto-hide after 5 seconds
       setTimeout(() => setShowClassification(false), 5000);
     },
   });
 
   useEffect(() => {
-    if (!viewerRef.current || osdRef.current) return;
+    if (!viewerRef.current || osdRef.current || !OpenSeadragon) return;
 
     osdRef.current = OpenSeadragon({
       element: viewerRef.current,
@@ -225,7 +233,7 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
           try {
             const created = await api.createAnnotation(annotationData);
             addAnnotation(created);
-            
+
             // Store the annotation ID so we can update it with the classification
             setCurrentAnnotationId(created.id);
 
@@ -282,16 +290,16 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
               ✕
             </button>
           </div>
-          
+
           {/* High-quality snippet preview */}
           {classification.snippet_preview && (
             <div className="mb-3">
               <div className="text-xs text-gray-400 mb-1">
                 What CLIP analyzed ({classification.snippet_size}):
               </div>
-              <img 
-                src={classification.snippet_preview} 
-                alt="Analyzed region" 
+              <img
+                src={classification.snippet_preview}
+                alt="Analyzed region"
                 className="w-full rounded border border-gray-700"
               />
               {classification.source_info && (
@@ -301,11 +309,13 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
               )}
             </div>
           )}
-          
+
           <div className="space-y-2">
             <div className="text-sm">
               <span className="text-gray-400">Detected: </span>
-              <span className="text-white font-medium">{classification.primary_classification}</span>
+              <span className="text-white font-medium">
+                {classification.primary_classification}
+              </span>
             </div>
             <div className="text-sm">
               <span className="text-gray-400">Confidence: </span>
@@ -314,21 +324,20 @@ export function Annotator({ tileSource, datasetId }: AnnotatorProps) {
               </span>
             </div>
             {classification.model && (
-              <div className="text-xs text-gray-500">
-                Model: {classification.model}
-              </div>
+              <div className="text-xs text-gray-500">Model: {classification.model}</div>
             )}
-            {classification.all_classifications && classification.all_classifications.length > 1 && (
-              <div className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-700">
-                <div>Other possibilities:</div>
-                {classification.all_classifications.slice(1, 4).map((cls: any, idx: number) => (
-                  <div key={idx} className="flex justify-between mt-1">
-                    <span>{cls.type}</span>
-                    <span>{(cls.confidence * 100).toFixed(1)}%</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            {classification.all_classifications &&
+              classification.all_classifications.length > 1 && (
+                <div className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-700">
+                  <div>Other possibilities:</div>
+                  {classification.all_classifications.slice(1, 4).map((cls: any, idx: number) => (
+                    <div key={idx} className="flex justify-between mt-1">
+                      <span>{cls.type}</span>
+                      <span>{(cls.confidence * 100).toFixed(1)}%</span>
+                    </div>
+                  ))}
+                </div>
+              )}
           </div>
         </div>
       )}

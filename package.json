@@ -8,7 +8,8 @@
     "pnpm": ">=8.0.0"
   },
   "scripts": {
-    "dev": "turbo run dev --parallel",
+    "dev": "./start-all.sh",
+    "dev:old": "turbo run dev --parallel",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "clean": "turbo run clean && rm -rf node_modules",

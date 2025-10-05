@@ -19,7 +19,7 @@ pip install -r ai/requirements.txt
 # 2. Build AI data
 cd ai && python simple_build.py && cd ..
 
-# 3. Start all services
+# 3. Start all services (one command!)
 pnpm dev
 ```
 
@@ -56,10 +56,11 @@ lsof -ti:3000,8000,8001 | xargs kill -9
 cd ai && python simple_build.py
 ```
 
-**Still broken?**
+**SSR errors?**
 
 ```bash
-pnpm clean && pnpm install && pnpm -r build
+# Restart all services
+pnpm dev
 ```
 
 That's it! 🌌
