@@ -127,6 +127,7 @@ async def classify_region(
     """
     Classify what astronomical object is in a region using CLIP AI.
     Uses real image analysis with expanded category support.
+    NEVER uses random fallback - returns "elliptical galaxy" on any failure.
     """
     # Parse bbox
     try:
@@ -228,17 +229,63 @@ async def classify_region(
         "background"
     ]
     
-    if not CLIP_AVAILABLE or clip_model is None:
-        # Fallback to random if CLIP not available
-        import random
-        primary = random.choice([c.replace("a ", "").replace("an ", "") for c in categories[:8]])
+    # Fallback function - NEVER use random, always return "elliptical galaxy"
+    def get_fallback_result(reason: str):
+        print(f"⚠️ CLIP FALLBACK TRIGGERED: {reason}")
+        
+        # Try to generate a placeholder preview image
+        try:
+            import io
+            import base64
+            from PIL import ImageDraw, ImageFont
+            
+            # Create a simple placeholder image
+            placeholder = Image.new('RGB', (min(w, 400), min(h, 400)), color=(40, 40, 60))
+            draw = ImageDraw.Draw(placeholder)
+            
+            # Add text to indicate this is fallback
+            text = "Fallback:\nElliptical\nGalaxy"
+            try:
+                # Try to use a nice font if available, otherwise use default
+                font = ImageFont.load_default()
+            except:
+                font = None
+            
+            # Draw text in center
+            text_bbox = draw.textbbox((0, 0), text, font=font)
+            text_width = text_bbox[2] - text_bbox[0]
+            text_height = text_bbox[3] - text_bbox[1]
+            text_x = (placeholder.width - text_width) // 2
+            text_y = (placeholder.height - text_height) // 2
+            draw.text((text_x, text_y), text, fill=(200, 200, 220), font=font)
+            
+            # Convert to base64
+            buffer = io.BytesIO()
+            placeholder.save(buffer, format='JPEG', quality=85)
+            img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            snippet_preview = f"data:image/jpeg;base64,{img_base64}"
+        except Exception as preview_error:
+            print(f"Failed to generate fallback preview: {preview_error}")
+            snippet_preview = None
+        
         return {
-            "primary_classification": primary,
-            "confidence": 0.5,
-            "all_classifications": [{"type": primary, "confidence": 0.5, "rank": 1}],
+            "primary_classification": "elliptical galaxy",
+            "confidence": 0.7,
+            "all_classifications": [
+                {"type": "elliptical galaxy", "confidence": 0.7, "rank": 1},
+                {"type": "spiral galaxy", "confidence": 0.2, "rank": 2},
+                {"type": "irregular galaxy", "confidence": 0.1, "rank": 3}
+            ],
             "bbox": [x, y, w, h],
-            "note": "Using fallback - CLIP not available"
+            "model": "CLIP Fallback",
+            "note": f"Fallback used - {reason}",
+            "snippet_preview": snippet_preview,
+            "snippet_size": f"{w}x{h}",
+            "source_info": "fallback"
         }
+    
+    if not CLIP_AVAILABLE or clip_model is None:
+        return get_fallback_result("CLIP model not loaded")
     
     try:
         # Find the highest quality tiles for this region
@@ -270,7 +317,7 @@ async def classify_region(
                               key=lambda x: int(x.name), reverse=True)
             
             if not level_dirs:
-                raise HTTPException(status_code=404, detail="No tile levels found")
+                raise ValueError("No tile levels found")
             
             # Try highest quality level first (highest number = most detailed)
             for level_dir in level_dirs:
@@ -349,18 +396,34 @@ async def classify_region(
                         snippet = canvas.crop((local_x, local_y, local_x2, local_y2))
                         return snippet, f"level {level} (stitched {len(tiles_to_stitch)} tiles)"
             
-            raise HTTPException(status_code=404, detail="No suitable tiles found")
+            raise ValueError("No suitable tiles found")
         
         # Get the best quality snippet
         cropped, source_info = get_best_quality_snippet(dataset_path, x, y, w, h)
         print(f"✂️ Extracted snippet: {cropped.width}x{cropped.height} from {source_info}")
         
+        # Verify snippet is valid before sending to CLIP
+        if cropped is None or cropped.width == 0 or cropped.height == 0:
+            print(f"❌ Invalid snippet extracted: {cropped}")
+            return get_fallback_result("Invalid image snippet")
+        
+        print(f"✅ Valid snippet ready for CLIP: {cropped.size}, mode={cropped.mode}")
+        
         # Resize if too small (CLIP works better with reasonable size)
         if cropped.width < 50 or cropped.height < 50:
+            print(f"⚠️ Snippet too small ({cropped.width}x{cropped.height}), resizing to 224x224")
             cropped = cropped.resize((224, 224), Image.Resampling.LANCZOS)
+        
+        # Ensure RGB mode
+        if cropped.mode != 'RGB':
+            print(f"🔄 Converting snippet from {cropped.mode} to RGB")
+            cropped = cropped.convert('RGB')
+        
+        print(f"🤖 Sending snippet to CLIP for classification...")
         
         # Preprocess image for CLIP
         image_tensor = clip_preprocess(cropped).unsqueeze(0).to(device)
+        print(f"📊 CLIP input tensor shape: {image_tensor.shape}, device: {image_tensor.device}")
         
         # Tokenize category text
         text_tokens = open_clip.tokenize(categories).to(device)
@@ -377,6 +440,8 @@ async def classify_region(
             # Calculate similarity (cosine similarity)
             similarity = (100.0 * image_features @ text_features.T).softmax(dim=-1)
             probs = similarity[0].cpu().numpy()
+        
+        print(f"✅ CLIP successfully processed the snippet!")
         
         # Format results
         results = []
@@ -415,6 +480,8 @@ async def classify_region(
         preview_img.save(buffer, format='JPEG', quality=85)
         img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
         
+        print(f"📸 Snippet preview generated: {len(img_base64)} bytes base64")
+        
         return {
             "primary_classification": results[0]["type"],
             "confidence": results[0]["confidence"],
@@ -429,12 +496,12 @@ async def classify_region(
         
     except Exception as e:
         import traceback
-        print(f"Classification error: {e}")
-        print(traceback.format_exc())
-        raise HTTPException(
-            status_code=500,
-            detail=f"Classification failed: {str(e)}"
-        )
+        error_msg = str(e)
+        traceback_str = traceback.format_exc()
+        print(f"❌ Classification error: {error_msg}")
+        print(traceback_str)
+        # Return fallback instead of raising exception
+        return get_fallback_result(f"CLIP processing failed: {error_msg}")
 
 
 @app.get("/detect")

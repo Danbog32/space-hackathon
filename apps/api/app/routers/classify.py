@@ -37,10 +37,12 @@ async def classify_region(
         ai_dataset_id = "demo" if datasetId in ["andromeda", "demo"] else datasetId
         
         async with httpx.AsyncClient(timeout=30.0) as client:
-            # Build query parameters for multiple bbox values
-            params = [("datasetId", ai_dataset_id)]
-            for bbox_val in bbox_parts:
-                params.append(("bbox", bbox_val))
+            # Send bbox as comma-separated string (AI service expects this format)
+            bbox_string = ','.join(map(str, bbox_parts))
+            params = {
+                "datasetId": ai_dataset_id,
+                "bbox": bbox_string
+            }
             
             response = await client.post(
                 f"{AI_URL}/classify",
