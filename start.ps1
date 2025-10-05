@@ -5,6 +5,10 @@ Write-Host "🌌 Starting Astro-Zoom Application..." -ForegroundColor Cyan
 Write-Host "=====================================" -ForegroundColor Cyan
 Write-Host ""
 
+# Ensure default datasets exist (Andromeda & Earth)
+Write-Host "Ensuring default datasets (Andromeda & Earth)..." -ForegroundColor Yellow
+python "$PSScriptRoot\infra\ensure_datasets.py" | Write-Host
+
 # Check if services are already running
 Write-Host "Checking for running services..." -ForegroundColor Yellow
 $port3000 = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue

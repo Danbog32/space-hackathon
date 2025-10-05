@@ -140,10 +140,15 @@ export const api = {
     return res.json();
   },
 
-  async deleteDataset(datasetId: string): Promise<void> {
+  async deleteDataset(datasetId: string): Promise<{ warnings?: string[] }> {
     const res = await fetch(`${API_BASE}/uploads/${datasetId}`, {
       method: "DELETE",
     });
     if (!res.ok) throw new Error("Failed to delete dataset");
+    const contentType = res.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      return res.json();
+    }
+    return {};
   },
 };

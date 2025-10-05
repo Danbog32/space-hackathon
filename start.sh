@@ -6,6 +6,10 @@ echo "🌌 Starting Astro-Zoom Application..."
 echo "====================================="
 echo ""
 
+# Ensure default datasets exist (Andromeda & Earth)
+echo "Ensuring default datasets (Andromeda & Earth)..."
+python3 infra/ensure_datasets.py || true
+
 # Check if services are already running
 echo "Checking for running services..."
 if lsof -Pi :3000 -sTCP:LISTEN -t >/dev/null 2>&1 ; then
