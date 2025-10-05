@@ -91,12 +91,14 @@ export const api = {
     query: string,
     datasetId: string,
     confidenceThreshold = 0.6,
-    maxResults = 50
+    maxResults = 50,
+    signal?: AbortSignal
   ): Promise<any> {
     const res = await fetch(
       `${API_BASE}/detect?q=${encodeURIComponent(
         query
-      )}&datasetId=${datasetId}&confidence_threshold=${confidenceThreshold}&max_results=${maxResults}`
+      )}&datasetId=${datasetId}&confidence_threshold=${confidenceThreshold}&max_results=${maxResults}`,
+      { signal }
     );
     if (!res.ok) throw new Error("Failed to detect objects");
     return res.json();

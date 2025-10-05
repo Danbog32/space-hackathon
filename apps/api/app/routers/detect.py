@@ -18,7 +18,7 @@ async def detect_objects(
     q: str = Query(..., description="Object type to detect (e.g., 'galaxy', 'star', 'nebula')"),
     datasetId: str = Query(..., description="Dataset to search"),
     confidence_threshold: float = Query(0.6, ge=0.0, le=1.0, description="Minimum confidence"),
-    max_results: int = Query(50, ge=1, le=200, description="Max detections to return"),
+    max_results: int = Query(500, ge=1, le=1000, description="Max detections to return"),
 ):
     """
     Detect and locate all instances of a specific astronomical object.
@@ -29,10 +29,12 @@ async def detect_objects(
     - Returns all locations with bounding boxes and confidence scores
     """
     try:
-        # Map frontend dataset IDs to AI service dataset IDs
-        ai_dataset_id = "demo" if datasetId in ["andromeda", "demo"] else datasetId
+        # Pass dataset ID directly to AI service (AI service handles all datasets now)
+        ai_dataset_id = datasetId
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        # Very long timeout for CLIP detection (may need to reconstruct + analyze large images)
+        # First detection can take 2-3 minutes for huge images
+        async with httpx.AsyncClient(timeout=300.0) as client:
             response = await client.get(
                 f"{AI_URL}/detect",
                 params={

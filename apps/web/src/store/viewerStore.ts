@@ -26,6 +26,9 @@ interface ViewerState {
 
   showSnippets: boolean;
   toggleShowSnippets: () => void;
+
+  boundingBoxOpacity: number;
+  setBoundingBoxOpacity: (opacity: number) => void;
 }
 
 export const useViewerStore = create<ViewerState>((set) => ({
@@ -58,4 +61,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
 
   showSnippets: true,
   toggleShowSnippets: () => set((state) => ({ showSnippets: !state.showSnippets })),
+
+  boundingBoxOpacity: 0.4,
+  setBoundingBoxOpacity: (opacity) => set({ boundingBoxOpacity: opacity }),
 }));
