@@ -189,6 +189,16 @@ class TileProcessor:
             with open(dzi_path, 'w') as f:
                 f.write(dzi_xml)
             
+            # Save a copy of the source image for AI/CLIP detection
+            # This allows object detection to work with the full resolution image
+            source_copy_path = output_dir / f"source{image_path.suffix}"
+            try:
+                shutil.copy2(image_path, source_copy_path)
+                print(f"✅ Saved source image copy for AI detection: {source_copy_path.name}")
+            except Exception as e:
+                print(f"⚠️ Could not save source image copy: {e}")
+                # Non-fatal - continue with tile generation
+            
             # Progress tracking
             total_tiles = sum(
                 math.ceil((width // (2 ** (num_levels - 1 - level))) / self.tile_size) *
